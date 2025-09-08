@@ -1,3 +1,4 @@
+import 'package:etkinlikuygulamasi/frontend/login/registerpage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
@@ -151,6 +152,23 @@ class Loginpage extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+
+              SizedBox(height: 24.h),
+              Text('Hala üye değil misin?', style: TextStyle(fontSize: 14.sp)),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          Registerpage(), // Yeni kayıt sayfanız
+                    ),
+                  );
+                },
+                child: Text(
+                  'Kayıt ol',
+                  style: TextStyle(fontSize: 12.sp, color: Colors.black),
+                ),
               ),
             ],
           ),

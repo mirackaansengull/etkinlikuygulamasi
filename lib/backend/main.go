@@ -1,26 +1,27 @@
 package main
 
 import (
-    "log"
-    "net/http"
-    "os"
-
-    "github.com/gorilla/mux"
-    "github.com/rs/cors"
+	"log"
+	"net/http"
+	"os"
+    
+	"github.com/gorilla/mux"
+	"github.com/rs/cors"
 )
 
 func main() {
-    // MongoDB bağlantısını başlat
-    err := ConnectDB() // database.go'dan gelen fonksiyon
-    if err != nil {
-        log.Fatalf("MongoDB bağlantı hatası: %v", err)
-    }
+	err := ConnectDB() 
+	if err != nil {
+		log.Fatalf("MongoDB bağlantı hatası: %v", err)
+	}
 
-    r := mux.NewRouter()
+
+	r := mux.NewRouter()
+	r.HandleFunc("/send-code", sendCodeHandler).Methods("POST", "OPTIONS")
+	r.HandleFunc("/register", registerHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/health", healthHandler).Methods("GET", "OPTIONS")
+	
 
-
-	// CORS configuration
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -30,8 +31,11 @@ func main() {
 
 	handler := c.Handler(r)
 
-	// Get port from environment or use default
 	port := os.Getenv("PORT")
-	log.Printf("AnticoGold API server starting on port %s", port)
+	if port == "" {
+		port = "8080" // Varsayılan port
+	}
+
+	log.Printf("Sunucu %s portunda başlıyor...", port)
 	log.Fatal(http.ListenAndServe(":"+port, handler))
 }
