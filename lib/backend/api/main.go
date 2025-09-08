@@ -12,9 +12,22 @@ func main() {
         log.Fatalf("MongoDB bağlantı hatası: %v", err)
     }
 
-    // Server'ı başlat (Vercel bunu otomatik yönetir)
-    log.Println("Server başlatılıyor...")
-    if err := http.ListenAndServe(":8080", nil); err != nil {
-        log.Fatalf("Server başlatılamadı: %v", err)
-    }
+    r := mux.NewRouter()
+	r.HandleFunc("/health", healthHandler).Methods("GET", "OPTIONS")
+
+
+	// CORS configuration
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"*"},
+		AllowCredentials: true,
+	})
+
+	handler := c.Handler(r)
+
+	// Get port from environment or use default
+	port := os.Getenv("PORT")
+	log.Printf("AnticoGold API server starting on port %s", port)
+	log.Fatal(http.ListenAndServe(":"+port, handler))
 }
