@@ -1,40 +1,77 @@
 package main
 
 import (
-    "context"
-    "log"
-    "time"
-    "os"
+	"context"
+	"log"
+	"os"
+	"sync"
+	"time"
 
-    "go.mongodb.org/mongo-driver/mongo"
-    "go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var client *mongo.Client
+// Global MongoDB bağlantı ve koleksiyon referansları
+var (
+	client                 *mongo.Client
+	database               *mongo.Database
+	usersCollection        *mongo.Collection
+	verificationCollection *mongo.Collection // Bu, sizin projenizdeki doğru koleksiyon adı
+)
 
-func ConnectDB() error {
-    // MongoDB Atlas bağlantı dizesi
-	connectionString := os.Getenv("MONGO_URI")
-    
-    // Client seçeneklerini ayarla
-    clientOptions := options.Client().ApplyURI(connectionString).
-        SetConnectTimeout(10 * time.Second)
+// Global değişkenler için mutex
+var (
+	dbInitMutex sync.Mutex
+	isDBInit    bool
+)
 
-    // MongoDB'ye bağlan
-    var err error
-    client, err = mongo.Connect(context.Background(), clientOptions)
-    if err != nil {
-        log.Printf("MongoDB bağlantı hatası: %v", err)
-        return err
-    }
+// InitMongoDB, MongoDB bağlantısını kurar ve koleksiyonları başlatır
+func InitMongoDB() {
+	dbInitMutex.Lock()
+	defer dbInitMutex.Unlock()
 
-    // Bağlantıyı test et
-    err = client.Ping(context.Background(), nil)
-    if err != nil {
-        log.Printf("MongoDB ping hatası: %v", err)
-        return err
-    }
+	// Bağlantı zaten başlatıldıysa tekrar başlatma
+	if isDBInit {
+		return
+	}
 
-    log.Println("MongoDB Atlas'a başarıyla bağlanıldı!")
-    return nil
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		log.Fatal("MONGO_URI ortam değişkeni tanımlı değil.")
+	}
+
+	clientOptions := options.Client().ApplyURI(mongoURI)
+	var err error
+	client, err = mongo.Connect(context.Background(), clientOptions)
+	if err != nil {
+		log.Fatal("MongoDB bağlantı hatası:", err)
+	}
+
+	// Bağlantıyı test et
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err = client.Ping(ctx, nil)
+	if err != nil {
+		log.Fatal("MongoDB ping hatası:", err)
+	}
+
+	log.Println("MongoDB'ye başarıyla bağlanıldı!")
+
+	// Veritabanı ve koleksiyonları başlat
+	database = client.Database("etkinlikuygulamasi") // Veritabanı adını kontrol edin
+	usersCollection = database.Collection("users")
+	verificationCollection = database.Collection("verification_codes")
+
+	isDBInit = true
+}
+
+// CloseDB, MongoDB bağlantısını kapatır
+func CloseDB() {
+	if client == nil {
+		return
+	}
+	err := client.Disconnect(context.Background())
+	if err != nil {
+		log.Println("MongoDB bağlantı kapatma hatası:", err)
+	}
 }
