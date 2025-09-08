@@ -16,8 +16,8 @@ func main() {
 	r := mux.NewRouter()
 
 	// Rotaları kaydet
-	r.HandleFunc("/api/send-code", sendCodeHandler).Methods("POST", "OPTIONS")
-	r.HandleFunc("/api/register", registerHandler).Methods("POST", "OPTIONS")
+	r.HandleFunc("/send-code", sendCodeHandler).Methods("POST", "OPTIONS")
+	r.HandleFunc("/register", registerHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/health", healthHandler).Methods("GET", "OPTIONS")
 
 	c := cors.New(cors.Options{
