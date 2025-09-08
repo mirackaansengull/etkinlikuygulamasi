@@ -1,8 +1,13 @@
 package main
 
 import (
+    "context"
     "log"
     "net/http"
+    "os"
+
+    "github.com/gorilla/mux"
+    "github.com/rs/cors"
 )
 
 func main() {
