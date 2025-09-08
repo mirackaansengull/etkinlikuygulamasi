@@ -21,6 +21,21 @@ class MyApp extends StatelessWidget {
       splitScreenMode: true,
       builder: (context, child) {
         return MaterialApp(
+          theme: ThemeData(
+            useMaterial3: true,
+            scaffoldBackgroundColor: Colors.white,
+            primaryColor: Colors.black,
+            fontFamily: 'Montserrat',
+            chipTheme: const ChipThemeData(
+              selectedColor: Colors.black,
+              checkmarkColor: Colors.white,
+            ),
+            cardTheme: const CardThemeData(color: Colors.white, elevation: 2),
+            colorScheme: ColorScheme.fromSwatch(
+              primarySwatch: Colors.grey,
+            ).copyWith(surface: Colors.white),
+          ),
+
           debugShowCheckedModeBanner: false,
           home: LoadingPage(),
         );
