@@ -62,7 +62,7 @@ func sendCodeHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     // MongoDB bağlantısını al
-    db := client.Database("etkinlikUygulamasi")
+    db := client.Database("etkinlikuygulamasi")
     usersCollection := db.Collection("users")
     verificationCollection := db.Collection("verification_codes")
 
