@@ -23,7 +23,7 @@ class _LoadingPageState extends State<LoadingPage> {
     final backend_url = Uri.parse('https://etkinlikuygulamasi.onrender.com');
 
     try {
-      final response = await http.get(Uri.parse('$backend_url/healt'));
+      final response = await http.get(Uri.parse('$backend_url/health'));
 
       if (response.statusCode == 200) {
         // Bağlantı başarılı, JSON yanıtını kontrol et
