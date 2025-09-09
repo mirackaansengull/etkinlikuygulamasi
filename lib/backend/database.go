@@ -64,14 +64,3 @@ func InitMongoDB() {
 
 	isDBInit = true
 }
-
-// CloseDB, MongoDB bağlantısını kapatır
-func CloseDB() {
-	if client == nil {
-		return
-	}
-	err := client.Disconnect(context.Background())
-	if err != nil {
-		log.Println("MongoDB bağlantı kapatma hatası:", err)
-	}
-}
