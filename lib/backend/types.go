@@ -8,14 +8,16 @@ import (
 
 // User, veritabanındaki kullanıcı belgesini temsil eder.
 type User struct {
-	ID        primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	Ad        string             `json:"ad" bson:"ad"`
-	Soyad     string             `json:"soyad" bson:"soyad"`
-	Telefon   string             `json:"telefon" bson:"telefon"`
-	DogumTarihi string           `json:"dogumTarihi" bson:"dogumTarihi"`
-	Email     string             `json:"email" bson:"email"`
-	Sifre     string             `json:"sifre" bson:"sifre"`
-	CreatedAt time.Time          `json:"createdAt" bson:"createdAt"`
+	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	Ad          string             `json:"ad" bson:"ad"`
+	Soyad       string             `json:"soyad" bson:"soyad"`
+	Telefon     string             `json:"telefon" bson:"telefon,omitempty"`
+	DogumTarihi string             `json:"dogumTarihi" bson:"dogumTarihi,omitempty"`
+	Email       string             `json:"email" bson:"email"`
+	Sifre       string             `json:"sifre" bson:"sifre,omitempty"` // Sosyal girişlerde boş kalabilir
+	Provider    string             `json:"provider" bson:"provider"`    // 'email', 'google', 'facebook'
+	SocialID    string             `json:"socialId" bson:"socialId,omitempty"` // Google/Facebook ID'si
+	CreatedAt   time.Time          `json:"createdAt" bson:"createdAt"`
 }
 
 // VerificationCode, email doğrulama kodlarını geçici olarak saklar.
@@ -43,4 +45,26 @@ type SendCodeRequest struct {
 
 type MessageResponse struct {
 	Message string `json:"message"`
+}
+
+// GoogleUser, Google'dan gelen kullanıcı bilgilerini tutar
+type GoogleUser struct {
+	Email         string `json:"email"`
+	VerifiedEmail bool   `json:"email_verified"`
+	Name          string `json:"name"`
+	GivenName     string `json:"given_name"`
+	FamilyName    string `json:"family_name"`
+	Picture       string `json:"picture"`
+}
+
+// FacebookUser, Facebook'tan gelen kullanıcı bilgilerini tutar
+type FacebookUser struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Picture struct {
+		Data struct {
+			URL string `json:"url"`
+		} `json:"data"`
+	} `json:"picture"`
 }
