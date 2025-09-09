@@ -33,154 +33,168 @@ func checkPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
-// --- HTTP İşleyicileri ---
 
-// sendCodeHandler, doğrulama kodu gönderir
 func sendCodeHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+    w.Header().Set("Access-Control-Allow-Origin", "*")
+    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
-		return
-	}
+    if r.Method == http.MethodOptions {
+        w.WriteHeader(http.StatusOK)
+        return
+    }
+    if r.Method != http.MethodPost {
+        http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
+        return
+    }
 
-	var req SendCodeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
-		return
-	}
+    var req SendCodeRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+        return
+    }
 
-	// Koleksiyonlara global değişkenler üzerinden erişim
-	var existingUser User
-	err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email}).Decode(&existingUser)
-	if err == nil {
-		http.Error(w, "Bu email zaten kayıtlı", http.StatusConflict)
-		return
-	}
-	if err != mongo.ErrNoDocuments {
-		log.Printf("MongoDB sorgu hatası: %v", err)
-		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-		return
-	}
+    var existingUser User
+    err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email}).Decode(&existingUser)
+    if err == nil {
+        http.Error(w, "Bu email zaten kayıtlı", http.StatusConflict)
+        return
+    }
+    if err != mongo.ErrNoDocuments {
+        log.Printf("MongoDB sorgu hatası: %v", err)
+        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+        return
+    }
 
-	code := generateVerificationCode()
-	expiresAt := time.Now().Add(3 * time.Minute)
+    code := generateVerificationCode()
+    expiresAt := time.Now().Add(3 * time.Minute)
 
-	// verification_codes koleksiyonu yerine pendingUsersCollection kullanıyoruz
-	_, err = verificationCollection.UpdateOne(
-		context.Background(),
-		bson.M{"email": req.Email},
-		bson.M{"$set": bson.M{
-			"code":      code,
-			"expiresAt": expiresAt,
-		}},
-		options.Update().SetUpsert(true),
-	)
-	if err != nil {
-		log.Printf("Doğrulama kodu kaydetme hatası: %v", err)
-		http.Error(w, "Doğrulama kodu gönderilemedi", http.StatusInternalServerError)
-		return
-	}
+    _, err = verificationCollection.UpdateOne(
+        context.Background(),
+        bson.M{"email": req.Email},
+        bson.M{"$set": bson.M{
+            "code":      code,
+            "expiresAt": expiresAt,
+        }},
+        options.Update().SetUpsert(true),
+    )
+    if err != nil {
+        log.Printf("Doğrulama kodu kaydetme hatası: %v", err)
+        http.Error(w, "Doğrulama kodu gönderilemedi", http.StatusInternalServerError)
+        return
+    }
 
-	from := os.Getenv("SMTP_USER")
-	password := os.Getenv("SMTP_PASSWORD")
-	host := os.Getenv("SMTP_HOST")
-	port := os.Getenv("SMTP_PORT")
-	if from == "" || password == "" || host == "" || port == "" {
-		log.Println("Hata: SMTP ortam değişkenleri tanımlanmamış.")
-		http.Error(w, "E-posta servisi yapılandırılamadı", http.StatusInternalServerError)
-		return
-	}
+    // E-posta gönderme işlemini Goroutine'de çalıştır
+    // Fonksiyon, bekleme yapmadan hemen devam eder
+    go func() {
+        from := os.Getenv("SMTP_USER")
+        password := os.Getenv("SMTP_PASSWORD")
+        host := os.Getenv("SMTP_HOST")
+        port := os.Getenv("SMTP_PORT")
+        
+        if from == "" || password == "" || host == "" || port == "" {
+            log.Println("Hata: SMTP ortam değişkenleri tanımlanmamış.")
+            return
+        }
 
-	mailBody := fmt.Sprintf("Merhaba,\n\nDoğrulama kodunuz: %s\n\nBu kod 3 dakika içinde geçerliliğini yitirecektir.\n\nİyi günler.", code)
-	msg := "From: " + from + "\n" +
-		"To: " + req.Email + "\n" +
-		"Subject: Hesap Doğrulama Kodunuz\n\n" +
-		mailBody
-	auth := smtp.PlainAuth("", from, password, host)
-	addr := host + ":" + port
+        mailBody := fmt.Sprintf("Merhaba,\n\nDoğrulama kodunuz: %s\n\nBu kod 3 dakika içinde geçerliliğini yitirecektir.\n\nİyi günler.", code)
+        msg := "From: " + from + "\n" +
+            "To: " + req.Email + "\n" +
+            "Subject: Hesap Doğrulama Kodunuz\n\n" +
+            mailBody
+        auth := smtp.PlainAuth("", from, password, host)
+        addr := host + ":" + port
 
-	err = smtp.SendMail(addr, auth, from, []string{req.Email}, []byte(msg))
-	if err != nil {
-		log.Printf("E-posta gönderim hatası: %v", err)
-		http.Error(w, "Doğrulama kodu gönderilemedi", http.StatusInternalServerError)
-		return
-	}
+        // E-posta gönderme işlemi, ayrı bir Goroutine içinde çalışıyor
+        err = smtp.SendMail(addr, auth, from, []string{req.Email}, []byte(msg))
+        if err != nil {
+            log.Printf("E-posta gönderim hatası (asenkron): %v", err)
+        } else {
+            log.Printf("Doğrulama kodu başarıyla gönderildi: %s", req.Email)
+        }
+    }()
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(MessageResponse{Message: "Doğrulama kodu e-mail adresinize başarıyla gönderildi."})
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(MessageResponse{Message: "Doğrulama kodu e-mail adresinize başarıyla gönderildi."})
 }
 
-// registerHandler, kullanıcıyı kaydeder
+
 func registerHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
-		return
-	}
+    startTime := time.Now() // Toplam süreyi ölçmek için başlangıç zamanı
 
-	var req RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
-		return
-	}
+    w.Header().Set("Access-Control-Allow-Origin", "*")
+    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+    if r.Method == http.MethodOptions {
+        w.WriteHeader(http.StatusOK)
+        return
+    }
+    if r.Method != http.MethodPost {
+        http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
+        return
+    }
 
-	// Koleksiyonlara global değişkenler üzerinden erişim
-	var verCode VerificationCode
-	err := verificationCollection.FindOne(context.Background(), bson.M{"email": req.Email}).Decode(&verCode)
-	if err != nil {
-		http.Error(w, "Doğrulama kodu geçersiz veya süresi dolmuş", http.StatusUnauthorized)
-		return
-	}
+    var req RegisterRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+        return
+    }
 
-	if verCode.Code != req.VerificationCode || time.Now().After(verCode.ExpiresAt) {
-		http.Error(w, "Doğrulama kodu geçersiz veya süresi dolmuş", http.StatusUnauthorized)
-		return
-	}
+    // Doğrulama kodu kontrolü
+    startStep1 := time.Now()
+    var verCode VerificationCode
+    err := verificationCollection.FindOne(context.Background(), bson.M{"email": req.Email}).Decode(&verCode)
+    if err != nil {
+        http.Error(w, "Doğrulama kodu geçersiz veya süresi dolmuş", http.StatusUnauthorized)
+        return
+    }
+    log.Printf("Adım 1: FindOne süresi: %v", time.Since(startStep1))
 
-	hashedPassword, err := hashPassword(req.Sifre)
-	if err != nil {
-		log.Printf("Şifre şifreleme hatası: %v", err)
-		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-		return
-	}
+    if verCode.Code != req.VerificationCode || time.Now().After(verCode.ExpiresAt) {
+        http.Error(w, "Doğrulama kodu geçersiz veya süresi dolmuş", http.StatusUnauthorized)
+        return
+    }
 
-	newUser := User{
-		Ad:          req.Ad,
-		Soyad:       req.Soyad,
-		Telefon:     req.Telefon,
-		DogumTarihi: req.DogumTarihi,
-		Email:       req.Email,
-		Sifre:       hashedPassword,
-		CreatedAt:   time.Now(),
-	}
+    // Şifre şifreleme
+    hashedPassword, err := hashPassword(req.Sifre)
+    if err != nil {
+        log.Printf("Şifre şifreleme hatası: %v", err)
+        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+        return
+    }
 
-	_, err = usersCollection.InsertOne(context.Background(), newUser)
-	if err != nil {
-		log.Printf("Kullanıcı kaydetme hatası: %v", err)
-		http.Error(w, "Kayıt işlemi başarısız oldu", http.StatusInternalServerError)
-		return
-	}
+    newUser := User{
+        Ad:          req.Ad,
+        Soyad:       req.Soyad,
+        Telefon:     req.Telefon,
+        DogumTarihi: req.DogumTarihi,
+        Email:       req.Email,
+        Sifre:       hashedPassword,
+        CreatedAt:   time.Now(),
+    }
 
-	_, err = verificationCollection.DeleteOne(context.Background(), bson.M{"email": req.Email})
-	if err != nil {
-		log.Printf("Doğrulama kodu silme hatası: %v", err)
-	}
+    // Yeni kullanıcıyı kaydetme
+    startStep2 := time.Now()
+    _, err = usersCollection.InsertOne(context.Background(), newUser)
+    if err != nil {
+        log.Printf("Kullanıcı kaydetme hatası: %v", err)
+        http.Error(w, "Kayıt işlemi başarısız oldu", http.StatusInternalServerError)
+        return
+    }
+    log.Printf("Adım 2: InsertOne süresi: %v", time.Since(startStep2))
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(MessageResponse{Message: "Kayıt işlemi başarıyla tamamlandı."})
+    // Doğrulama kodunu silme
+    startStep3 := time.Now()
+    _, err = verificationCollection.DeleteOne(context.Background(), bson.M{"email": req.Email})
+    if err != nil {
+        log.Printf("Doğrulama kodu silme hatası: %v", err)
+    }
+    log.Printf("Adım 3: DeleteOne süresi: %v", time.Since(startStep3))
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(MessageResponse{Message: "Kayıt işlemi başarıyla tamamlandı."})
+
+    log.Printf("Toplam kayıt işlemi süresi: %v", time.Since(startTime))
 }
