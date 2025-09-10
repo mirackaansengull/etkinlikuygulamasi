@@ -1,9 +1,87 @@
 import 'package:etkinlikuygulamasi/frontend/login/registerpage.dart';
+import 'package:etkinlikuygulamasi/frontend/home/homepage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
-class Loginpage extends StatelessWidget {
+class Loginpage extends StatefulWidget {
   const Loginpage({super.key});
+
+  @override
+  _LoginpageState createState() => _LoginpageState();
+}
+
+class _LoginpageState extends State<Loginpage> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _rememberMe = false;
+
+  // E-posta ve şifre ile giriş için handler
+  Future<void> _loginHandler(BuildContext context) async {
+    final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
+    final Uri url = Uri.parse('$serverUrl/auth/login');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': _emailController.text.trim(),
+          'sifre': _passwordController.text,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        if (responseData['status'] == 'success') {
+          // Başarılı giriş, HomePage'e yönlendir
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const Homepage()),
+          );
+        } else {
+          // Hata mesajı göster
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(responseData['message'] ?? 'Giriş başarısız'),
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sunucu hatası: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Giriş hatası: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Bir hata oluştu')));
+    }
+  }
+
+  // Google Giriş için URL'yi başlatma fonksiyonu
+  void _launchGoogleLogin(BuildContext context) async {
+    final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
+    final Uri url = Uri.parse('$serverUrl/auth/google/login');
+
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('URL açılamadı: $url')));
+      }
+    } catch (e) {
+      debugPrint('Hata: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Bir hata oluştu: $e')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,19 +95,21 @@ class Loginpage extends StatelessWidget {
               Image.asset('images/eventra.png', width: 150.w, height: 150.h),
               // 1. Email Girişi
               TextField(
+                controller: _emailController,
                 decoration: InputDecoration(
-                  labelStyle: TextStyle(color: Color.fromARGB(255, 17, 48, 82)),
+                  labelStyle: const TextStyle(
+                    color: Color.fromARGB(255, 17, 48, 82),
+                  ),
                   labelText: 'Email',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(5.r),
                   ),
-                  // Odaklandığında kenarlık rengini koyu siyaha ayarlar
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(7.r),
                     borderSide: const BorderSide(
                       color: Color.fromARGB(255, 17, 48, 82),
                       width: 2,
-                    ), // Kalın ve koyu siyah
+                    ),
                   ),
                 ),
               ),
@@ -37,20 +117,22 @@ class Loginpage extends StatelessWidget {
 
               // 2. Şifre Girişi
               TextField(
+                controller: _passwordController,
                 obscureText: true,
                 decoration: InputDecoration(
-                  labelStyle: TextStyle(color: Color.fromARGB(255, 17, 48, 82)),
+                  labelStyle: const TextStyle(
+                    color: Color.fromARGB(255, 17, 48, 82),
+                  ),
                   labelText: 'Şifre',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(5.r),
                   ),
-                  // Odaklandığında kenarlık rengini koyu siyaha ayarlar
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(7.r),
                     borderSide: const BorderSide(
                       color: Color.fromARGB(255, 17, 48, 82),
                       width: 2,
-                    ), // Kalın ve koyu siyah
+                    ),
                   ),
                 ),
               ),
@@ -61,9 +143,7 @@ class Loginpage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextButton(
-                    onPressed: () {
-                      // Şifremi unuttum butonu
-                    },
+                    onPressed: () {},
                     child: Text(
                       'Şifremi Unuttum?',
                       style: TextStyle(fontSize: 12.sp, color: Colors.black),
@@ -71,7 +151,14 @@ class Loginpage extends StatelessWidget {
                   ),
                   Row(
                     children: [
-                      Checkbox(value: false, onChanged: (bool? value) {}),
+                      Checkbox(
+                        value: _rememberMe,
+                        onChanged: (bool? value) {
+                          setState(() {
+                            _rememberMe = value ?? false;
+                          });
+                        },
+                      ),
                       Text('Beni Hatırla', style: TextStyle(fontSize: 12.sp)),
                     ],
                   ),
@@ -81,11 +168,9 @@ class Loginpage extends StatelessWidget {
 
               // 4. Giriş Butonu
               ElevatedButton(
-                onPressed: () {
-                  // Giriş butonu işlemleri
-                },
+                onPressed: () => _loginHandler(context),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color.fromARGB(255, 17, 48, 82),
+                  backgroundColor: const Color.fromARGB(255, 17, 48, 82),
                   minimumSize: Size(double.infinity, 50.h),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10.r),
@@ -116,13 +201,10 @@ class Loginpage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () => _launchGoogleLogin(context),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(
-                        color: Colors.grey,
-                        width: 1.0,
-                      ), // Kenarlık rengi
-                      minimumSize: Size(80.w, 50.h), // Buton boyutu
+                      side: const BorderSide(color: Colors.grey, width: 1.0),
+                      minimumSize: Size(80.w, 50.h),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10.r),
                       ),
@@ -140,7 +222,7 @@ class Loginpage extends StatelessWidget {
                       side: const BorderSide(
                         color: Color.fromARGB(255, 158, 158, 158),
                         width: 1.0,
-                      ), // Kenarlık rengi
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10.r),
                       ),
@@ -153,15 +235,13 @@ class Loginpage extends StatelessWidget {
                   ),
                 ],
               ),
-
               SizedBox(height: 24.h),
               Text('Hala üye değil misin?', style: TextStyle(fontSize: 14.sp)),
               TextButton(
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) =>
-                          Registerpage(), // Yeni kayıt sayfanız
+                      builder: (context) => const Registerpage(),
                     ),
                   );
                 },
@@ -175,5 +255,12 @@ class Loginpage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 }
