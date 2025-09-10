@@ -108,7 +108,7 @@ class _LoginpageState extends State<Loginpage> {
                     borderRadius: BorderRadius.circular(7.r),
                     borderSide: const BorderSide(
                       color: Color.fromARGB(255, 17, 48, 82),
-                      width: 2,
+                      width: 1,
                     ),
                   ),
                 ),
