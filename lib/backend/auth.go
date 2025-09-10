@@ -277,11 +277,7 @@ func handleGoogleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
-    state := r.FormValue("state")
-    if state != "random" {
-        http.Error(w, "State mismatch", http.StatusUnauthorized)
-        return
-    }
+    
 
     code := r.FormValue("code")
     if code == "" {
