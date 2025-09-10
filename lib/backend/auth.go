@@ -270,6 +270,12 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
     log.Printf("Toplam kayıt işlemi süresi: %v", time.Since(startTime))
 }
 
+func handleGoogleLogin(w http.ResponseWriter, r *http.Request) {
+	state := fmt.Sprintf("%d", rand.Intn(1000000))
+	url := googleOAuthConfig.AuthCodeURL(state)
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
 func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
     code := r.URL.Query().Get("code")
     if code == "" {
