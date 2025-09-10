@@ -9,12 +9,10 @@ class Loginpage extends StatelessWidget {
   // Google Giriş için URL'yi başlatma fonksiyonu
   void _launchGoogleLogin() async {
     final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
-    final Uri url = Uri.parse(
-      '$serverUrl/auth/google/login',
-    ); // Değişiklik: /auth/google olarak değiştir
+    final Uri url = Uri.parse('$serverUrl/auth/google/login');
 
     if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.inAppWebView);
+      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
     } else {
       throw 'URL başlatılamıyor: $url';
     }
