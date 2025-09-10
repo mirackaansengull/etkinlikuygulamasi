@@ -337,11 +337,14 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
     // Başarılı girişten sonra token oluştur ve yanıtla
     // Bu kısım, mobil uygulama için en önemli değişikliktir.
     // HTTP yönlendirmesi yerine JSON yanıtı döndürüyoruz.
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]string{
-        "message": "Giriş Başarılı",
-        "token":   "oluşturulan_token", // Güvenlik için gerçek token oluşturma kodunu eklemelisiniz.
-    })
+        successURL := "https://etkinlikuygulamasi.onrender.com/auth/google/success"
+    http.Redirect(w, r, successURL, http.StatusFound)
+}
+
+func googleSuccessHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "text/html")
+    w.WriteHeader(http.StatusOK)
+    fmt.Fprintf(w, "<html><body><h1>Giriş Başarılı!</h1><p>Şimdi uygulamaya geri dönebilirsiniz.</p></body></html>")
 }
 
 // handleFacebookCallback, Facebook OAuth2 yönlendirmesini işler
