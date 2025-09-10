@@ -28,6 +28,11 @@ type VerificationCode struct {
 	ExpiresAt time.Time          `json:"expiresAt" bson:"expiresAt"`
 }
 
+type LoginRequest struct {
+    Email    string `json:"email"`
+    Sifre    string `json:"sifre"`
+}
+
 // Handler'lar için istek ve yanıt yapıları
 type RegisterRequest struct {
 	Ad               string `json:"ad"`

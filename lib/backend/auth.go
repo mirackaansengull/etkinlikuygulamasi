@@ -147,6 +147,53 @@ func sendCodeHandler(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(MessageResponse{Message: "Doğrulama kodu e-mail adresinize başarıyla gönderildi."})
 }
 
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Access-Control-Allow-Origin", "*")
+    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+    if r.Method == http.MethodOptions {
+        w.WriteHeader(http.StatusOK)
+        return
+    }
+    if r.Method != http.MethodPost {
+        http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
+        return
+    }
+
+    var req LoginRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+        return
+    }
+
+    // Kullanıcıyı veritabanında ara
+    var user User
+    err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email, "provider": "email"}).Decode(&user)
+    if err == mongo.ErrNoDocuments {
+        http.Error(w, "Kullanıcı bulunamadı veya yanlış kimlik doğrulama yöntemi", http.StatusUnauthorized)
+        return
+    } else if err != nil {
+        log.Printf("Veritabanı hatası: %v", err)
+        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+        return
+    }
+
+    // Şifreyi kontrol et
+    if !checkPasswordHash(req.Sifre, user.Sifre) {
+        http.Error(w, "Hatalı şifre", http.StatusUnauthorized)
+        return
+    }
+
+    // Başarılı giriş
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(map[string]string{
+        "status":  "success",
+        "message": "Giriş başarılı",
+    })
+}
+
 func registerHandler(w http.ResponseWriter, r *http.Request) {
     startTime := time.Now()
 
@@ -223,16 +270,6 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
     log.Printf("Toplam kayıt işlemi süresi: %v", time.Since(startTime))
 }
 
-func handleGoogleLogin(w http.ResponseWriter, r *http.Request) {
-    // Rastgele state üret (CSRF koruması için, opsiyonel ama önerilir)
-    state := fmt.Sprintf("%d", rand.Intn(1000000))
-    // State'i session veya cookie'ye kaydet (basitlik için şimdilik atla, üretimde ekle)
-
-    url := googleOAuthConfig.AuthCodeURL(state)
-    http.Redirect(w, r, url, http.StatusTemporaryRedirect)
-}
-
-// handleGoogleCallback, Google OAuth2 yönlendirmesini işler
 func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
     code := r.URL.Query().Get("code")
     if code == "" {
@@ -271,7 +308,7 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
             Soyad:     googleUser.FamilyName,
             Email:     googleUser.Email,
             Provider:  "google",
-            SocialID:  googleUser.Email, // Email'i SocialID olarak kullanıyoruz
+            SocialID:  googleUser.Email,
             CreatedAt: time.Now(),
         }
         _, err = usersCollection.InsertOne(context.Background(), newUser)
@@ -284,9 +321,9 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(MessageResponse{Message: "Google ile giriş başarılı."})
+    // Flutter uygulamasına yönlendirme
+    redirectURL := "com.example.etkinlikuygulamasi:/home?status=success"
+    http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }
 
 // handleFacebookCallback, Facebook OAuth2 yönlendirmesini işler

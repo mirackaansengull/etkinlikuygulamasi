@@ -15,10 +15,11 @@ func main() {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/send-code", sendCodeHandler).Methods("POST", "OPTIONS")
+	r.HandleFunc("/login", loginHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/register", registerHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/auth/google/callback", handleGoogleCallback).Methods("GET")
-	r.HandleFunc("/auth/google/login", handleGoogleLogin).Methods("GET")
 	r.HandleFunc("/auth/facebook/callback", handleFacebookCallback).Methods("GET")
+
 	r.HandleFunc("/health", healthHandler).Methods("GET", "OPTIONS")
 
 	c := cors.New(cors.Options{
