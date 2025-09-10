@@ -333,18 +333,65 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "Veritabanı hatası", http.StatusInternalServerError)
         return
     }
-
-    // Başarılı girişten sonra token oluştur ve yanıtla
-    // Bu kısım, mobil uygulama için en önemli değişikliktir.
-    // HTTP yönlendirmesi yerine JSON yanıtı döndürüyoruz.
-        successURL := "https://etkinlikuygulamasi.onrender.com/auth/google/success"
-    http.Redirect(w, r, successURL, http.StatusFound)
 }
 
-func googleSuccessHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "text/html")
+func handleGoogleTokenVerification(w http.ResponseWriter, r *http.Request) {
+    var requestBody struct {
+        Token string `json:"token"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+        return
+    }
+
+    // Google'dan gelen idToken'ı doğrulamak için Google'ın kendi API'sini kullanmak gerekir.
+    // Ancak basitleştirilmiş bir örnek olarak, token'ı kullanarak kullanıcı bilgilerini alacağız.
+    // Bu, güvenlik açısından önerilmeyen bir yöntemdir.
+    // Önerilen: `google-api-go-client` gibi bir kütüphane kullanarak token'ı doğrulayın.
+    resp, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + requestBody.Token)
+    if err != nil {
+        http.Error(w, "Kullanıcı bilgisi alınamadı", http.StatusInternalServerError)
+        return
+    }
+    defer resp.Body.Close()
+
+    var googleUser GoogleUser
+    if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {
+        http.Error(w, "Kullanıcı bilgisi çözümlenemedi", http.StatusInternalServerError)
+        return
+    }
+
+    // Veritabanında kullanıcıyı kontrol et veya oluştur
+    var existingUser User
+    err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&existingUser)
+
+    if err == mongo.ErrNoDocuments {
+        // Yeni kullanıcıyı kaydet
+        newUser := User{
+            Ad:        googleUser.Name,
+            Soyad:     googleUser.FamilyName,
+            Email:     googleUser.Email,
+            Provider:  "google",
+            SocialID:  googleUser.Email,
+            CreatedAt: time.Now(),
+        }
+        _, err = usersCollection.InsertOne(context.Background(), newUser)
+        if err != nil {
+            http.Error(w, "Kayıt işlemi başarısız", http.StatusInternalServerError)
+            return
+        }
+    } else if err != nil {
+        http.Error(w, "Veritabanı hatası", http.StatusInternalServerError)
+        return
+    }
+
+    // Başarılı giriş
+    w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusOK)
-    fmt.Fprintf(w, "<html><body><h1>Giriş Başarılı!</h1><p>Şimdi uygulamaya geri dönebilirsiniz.</p></body></html>")
+    json.NewEncoder(w).Encode(map[string]string{
+        "message": "Giriş Başarılı",
+        "token":   "oluşturulan_token", // Gerçek bir token oluşturma kodunu buraya ekleyin
+    })
 }
 
 // handleFacebookCallback, Facebook OAuth2 yönlendirmesini işler
