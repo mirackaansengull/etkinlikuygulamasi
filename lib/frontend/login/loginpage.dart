@@ -1,9 +1,24 @@
 import 'package:etkinlikuygulamasi/frontend/login/registerpage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class Loginpage extends StatelessWidget {
   const Loginpage({super.key});
+
+  // Google Giriş için URL'yi başlatma fonksiyonu
+  void _launchGoogleLogin() async {
+    final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
+    final Uri url = Uri.parse(
+      '$serverUrl/auth/google/login',
+    ); // Değişiklik: /auth/google olarak değiştir
+
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.inAppWebView);
+    } else {
+      throw 'URL başlatılamıyor: $url';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,18 +33,19 @@ class Loginpage extends StatelessWidget {
               // 1. Email Girişi
               TextField(
                 decoration: InputDecoration(
-                  labelStyle: TextStyle(color: Color.fromARGB(255, 17, 48, 82)),
+                  labelStyle: const TextStyle(
+                    color: Color.fromARGB(255, 17, 48, 82),
+                  ),
                   labelText: 'Email',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(5.r),
                   ),
-                  // Odaklandığında kenarlık rengini koyu siyaha ayarlar
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(7.r),
                     borderSide: const BorderSide(
                       color: Color.fromARGB(255, 17, 48, 82),
                       width: 2,
-                    ), // Kalın ve koyu siyah
+                    ),
                   ),
                 ),
               ),
@@ -39,18 +55,19 @@ class Loginpage extends StatelessWidget {
               TextField(
                 obscureText: true,
                 decoration: InputDecoration(
-                  labelStyle: TextStyle(color: Color.fromARGB(255, 17, 48, 82)),
+                  labelStyle: const TextStyle(
+                    color: Color.fromARGB(255, 17, 48, 82),
+                  ),
                   labelText: 'Şifre',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(5.r),
                   ),
-                  // Odaklandığında kenarlık rengini koyu siyaha ayarlar
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(7.r),
                     borderSide: const BorderSide(
                       color: Color.fromARGB(255, 17, 48, 82),
                       width: 2,
-                    ), // Kalın ve koyu siyah
+                    ),
                   ),
                 ),
               ),
@@ -61,9 +78,7 @@ class Loginpage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextButton(
-                    onPressed: () {
-                      // Şifremi unuttum butonu
-                    },
+                    onPressed: () {},
                     child: Text(
                       'Şifremi Unuttum?',
                       style: TextStyle(fontSize: 12.sp, color: Colors.black),
@@ -81,11 +96,9 @@ class Loginpage extends StatelessWidget {
 
               // 4. Giriş Butonu
               ElevatedButton(
-                onPressed: () {
-                  // Giriş butonu işlemleri
-                },
+                onPressed: () {},
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color.fromARGB(255, 17, 48, 82),
+                  backgroundColor: const Color.fromARGB(255, 17, 48, 82),
                   minimumSize: Size(double.infinity, 50.h),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10.r),
@@ -116,13 +129,10 @@ class Loginpage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   OutlinedButton(
-                    onPressed: () {},
+                    onPressed: _launchGoogleLogin, // Google butonu fonksiyonu
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(
-                        color: Colors.grey,
-                        width: 1.0,
-                      ), // Kenarlık rengi
-                      minimumSize: Size(80.w, 50.h), // Buton boyutu
+                      side: const BorderSide(color: Colors.grey, width: 1.0),
+                      minimumSize: Size(80.w, 50.h),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10.r),
                       ),
@@ -140,7 +150,7 @@ class Loginpage extends StatelessWidget {
                       side: const BorderSide(
                         color: Color.fromARGB(255, 158, 158, 158),
                         width: 1.0,
-                      ), // Kenarlık rengi
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10.r),
                       ),
@@ -153,15 +163,13 @@ class Loginpage extends StatelessWidget {
                   ),
                 ],
               ),
-
               SizedBox(height: 24.h),
               Text('Hala üye değil misin?', style: TextStyle(fontSize: 14.sp)),
               TextButton(
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) =>
-                          Registerpage(), // Yeni kayıt sayfanız
+                      builder: (context) => const Registerpage(),
                     ),
                   );
                 },

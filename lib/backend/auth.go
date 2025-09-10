@@ -223,6 +223,15 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
     log.Printf("Toplam kayıt işlemi süresi: %v", time.Since(startTime))
 }
 
+func handleGoogleLogin(w http.ResponseWriter, r *http.Request) {
+    // Rastgele state üret (CSRF koruması için, opsiyonel ama önerilir)
+    state := fmt.Sprintf("%d", rand.Intn(1000000))
+    // State'i session veya cookie'ye kaydet (basitlik için şimdilik atla, üretimde ekle)
+
+    url := googleOAuthConfig.AuthCodeURL(state)
+    http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
 // handleGoogleCallback, Google OAuth2 yönlendirmesini işler
 func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
     code := r.URL.Query().Get("code")
