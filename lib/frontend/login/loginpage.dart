@@ -69,7 +69,7 @@ class _LoginpageState extends State<Loginpage> {
 
     try {
       if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
+        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
       } else {
         ScaffoldMessenger.of(
           context,

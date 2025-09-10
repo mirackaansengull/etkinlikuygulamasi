@@ -277,19 +277,25 @@ func handleGoogleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
-    code := r.URL.Query().Get("code")
+    state := r.FormValue("state")
+    if state != "random" {
+        http.Error(w, "State mismatch", http.StatusUnauthorized)
+        return
+    }
+
+    code := r.FormValue("code")
     if code == "" {
-        http.Error(w, "Yetkilendirme kodu eksik", http.StatusBadRequest)
+        http.Error(w, "Code not found", http.StatusBadRequest)
         return
     }
 
     token, err := googleOAuthConfig.Exchange(context.Background(), code)
     if err != nil {
-        http.Error(w, "Token değişimi başarısız", http.StatusInternalServerError)
-        log.Printf("Google OAuth token değişimi hatası: %v", err)
+        http.Error(w, "Token değişimi başarısız: "+err.Error(), http.StatusInternalServerError)
         return
     }
 
+    // Google'dan kullanıcı bilgilerini al
     resp, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + token.AccessToken)
     if err != nil {
         http.Error(w, "Kullanıcı bilgisi alınamadı", http.StatusInternalServerError)
@@ -297,25 +303,30 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
     }
     defer resp.Body.Close()
 
+    body, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        http.Error(w, "Yanıt okunamadı", http.StatusInternalServerError)
+        return
+    }
+
     var googleUser GoogleUser
-    if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {
+    if err := json.Unmarshal(body, &googleUser); err != nil {
         http.Error(w, "Kullanıcı bilgisi çözümlenemedi", http.StatusInternalServerError)
         return
     }
 
-    // Veritabanı işlemleri
+    // Veritabanında kullanıcıyı kontrol et veya oluştur
     var existingUser User
     err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&existingUser)
 
     if err == mongo.ErrNoDocuments {
         // Yeni kullanıcıyı kaydet
         newUser := User{
-            Ad:        googleUser.GivenName,
-            Soyad:     googleUser.FamilyName,
-            Email:     googleUser.Email,
-            Provider:  "google",
-            SocialID:  googleUser.Email,
-            CreatedAt: time.Now(),
+            Ad:          googleUser.Name,
+            Soyad:       googleUser.FamilyName,
+            Email:       googleUser.Email,
+            Provider:    "google",
+            CreatedAt:   time.Now(),
         }
         _, err = usersCollection.InsertOne(context.Background(), newUser)
         if err != nil {
@@ -327,9 +338,14 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Flutter uygulamasına yönlendirme
-    redirectURL := "com.example.etkinlikuygulamasi:/home?status=success"
-    http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+    // Başarılı girişten sonra token oluştur ve yanıtla
+    // Bu kısım, mobil uygulama için en önemli değişikliktir.
+    // HTTP yönlendirmesi yerine JSON yanıtı döndürüyoruz.
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{
+        "message": "Giriş Başarılı",
+        "token":   "oluşturulan_token", // Güvenlik için gerçek token oluşturma kodunu eklemelisiniz.
+    })
 }
 
 // handleFacebookCallback, Facebook OAuth2 yönlendirmesini işler
