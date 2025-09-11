@@ -60,7 +60,7 @@ class _LoginpageState extends State<Loginpage> {
   // E-posta ve şifre ile giriş için handler
   Future<void> _loginHandler(BuildContext context) async {
     final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
-    final Uri url = Uri.parse('$serverUrl/auth/login');
+    final Uri url = Uri.parse('$serverUrl/login');
 
     try {
       final response = await http.post(
@@ -99,7 +99,7 @@ class _LoginpageState extends State<Loginpage> {
   // Google Giriş için URL'yi başlatma fonksiyonu
   void _launchGoogleLogin(BuildContext context) async {
     final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
-    final Uri url = Uri.parse('$serverUrl/auth/google/login');
+    final Uri url = Uri.parse('$serverUrl/google/login');
 
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.inAppBrowserView);

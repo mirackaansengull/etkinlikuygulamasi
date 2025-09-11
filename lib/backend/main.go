@@ -18,8 +18,8 @@ func main() {
 	r.HandleFunc("/send-code", sendCodeHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/login", loginHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/register", registerHandler).Methods("POST", "OPTIONS")
-	r.HandleFunc("/auth/google/login", googleLoginHandler).Methods("GET", "OPTIONS")
-	r.HandleFunc("/auth/google/callback", googleCallbackHandler).Methods("GET", "OPTIONS")
+	r.HandleFunc("/google/login", googleLoginHandler).Methods("GET", "OPTIONS")
+	r.HandleFunc("/google/callback", googleCallbackHandler).Methods("GET", "OPTIONS")
 
 	
 
