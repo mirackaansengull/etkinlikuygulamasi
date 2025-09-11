@@ -41,8 +41,8 @@ func checkPasswordHash(password, hash string) bool {
 func sendEmail(to, subject, body string) error {
 	smtpHost := os.Getenv("SMTP_HOST")
 	smtpPort := os.Getenv("SMTP_PORT")
-	smtpUsername := os.Getenv("EMAIL_USERNAME")
-	smtpPassword := os.Getenv("EMAIL_PASSWORD")
+	smtpUsername := os.Getenv("SMTP_USER")
+	smtpPassword := os.Getenv("SMTP_PASSWORD")
 
 	msg := []byte("To: " + to + "\r\n" +
 		"Subject: " + subject + "\r\n" +
