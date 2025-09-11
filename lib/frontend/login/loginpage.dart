@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:etkinlikuygulamasi/frontend/home/homepage.dart';
+import 'package:etkinlikuygulamasi/frontend/login/forgotpasswordpage.dart';
 import 'package:etkinlikuygulamasi/frontend/login/registerpage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -110,6 +111,22 @@ class _LoginpageState extends State<Loginpage> {
     }
   }
 
+  // loginpage.dart
+
+  // Facebook Giriş için URL'yi başlatma fonksiyonu
+  void _launchFacebookLogin(BuildContext context) async {
+    final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
+    final Uri url = Uri.parse('$serverUrl/facebook/login');
+
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('URL açılamadı: $url')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -166,7 +183,13 @@ class _LoginpageState extends State<Loginpage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const ForgotPasswordPage(),
+                        ),
+                      );
+                    },
                     child: Text(
                       'Şifremi Unuttum?',
                       style: TextStyle(fontSize: 12.sp, color: Colors.black),
@@ -234,7 +257,7 @@ class _LoginpageState extends State<Loginpage> {
                   ),
                   SizedBox(width: 24.w),
                   OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () => _launchFacebookLogin(context),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(
                         color: Color.fromARGB(255, 158, 158, 158),
