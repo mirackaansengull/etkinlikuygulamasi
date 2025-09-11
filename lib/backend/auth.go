@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io" // ioutil yerine io paketi kullanıldı
 	"log"
 	"math/rand"
 	"net/http"
@@ -36,6 +37,28 @@ func checkPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
+// E-posta gönderme fonksiyonu
+func sendEmail(to, subject, body string) error {
+	smtpHost := os.Getenv("SMTP_HOST")
+	smtpPort := os.Getenv("SMTP_PORT")
+	smtpUsername := os.Getenv("EMAIL_USERNAME")
+	smtpPassword := os.Getenv("EMAIL_PASSWORD")
+
+	msg := []byte("To: " + to + "\r\n" +
+		"Subject: " + subject + "\r\n" +
+		"\r\n" +
+		body + "\r\n")
+
+	auth := smtp.PlainAuth("", smtpUsername, smtpPassword, smtpHost)
+	addr := smtpHost + ":" + smtpPort
+
+	err := smtp.SendMail(addr, auth, smtpUsername, []string{to}, msg)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 
 var googleOAuthConfig *oauth2.Config
 var facebookOAuthConfig *oauth2.Config
@@ -45,7 +68,7 @@ func init() {
 	googleOAuthConfig = &oauth2.Config{
 		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"), // Ortam değişkenlerinden alınacak
+		RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
 		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint:     google.Endpoint,
 	}
@@ -54,7 +77,7 @@ func init() {
 	facebookOAuthConfig = &oauth2.Config{
 		ClientID:     os.Getenv("FACEBOOK_CLIENT_ID"),
 		ClientSecret: os.Getenv("FACEBOOK_CLIENT_SECRET"),
-		RedirectURL:  os.Getenv("FACEBOOK_REDIRECT_URL"), // Ortam değişkenlerinden alınacak
+		RedirectURL:  os.Getenv("FACEBOOK_REDIRECT_URL"),
 		Scopes:       []string{"email", "public_profile"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://www.facebook.com/v10.0/dialog/oauth",
@@ -63,463 +86,409 @@ func init() {
 	}
 }
 
+// --- Handler Fonksiyonları ---
+
 func sendCodeHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-    if r.Method == http.MethodOptions {
-        w.WriteHeader(http.StatusOK)
-        return
-    }
-    if r.Method != http.MethodPost {
-        http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
-        return
-    }
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
+		return
+	}
 
-    var req SendCodeRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
-        return
-    }
+	var req SendCodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+		return
+	}
 
-    var existingUser User
-    err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email}).Decode(&existingUser)
-    if err == nil {
-        http.Error(w, "Bu email zaten kayıtlı", http.StatusConflict)
-        return
-    }
-    if err != mongo.ErrNoDocuments {
-        log.Printf("MongoDB sorgu hatası: %v", err)
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
+	var existingUser User
+	err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email}).Decode(&existingUser)
+	if err == nil {
+		http.Error(w, "Bu email zaten kayıtlı", http.StatusConflict)
+		return
+	}
+	if err != mongo.ErrNoDocuments {
+		log.Printf("MongoDB sorgu hatası: %v", err)
+		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+		return
+	}
 
-    code := generateVerificationCode()
-    expiresAt := time.Now().Add(3 * time.Minute)
+	code := generateVerificationCode()
+	expiresAt := time.Now().Add(3 * time.Minute)
 
-    _, err = verificationCollection.UpdateOne(
-        context.Background(),
-        bson.M{"email": req.Email},
-        bson.M{"$set": bson.M{
-            "code":      code,
-            "expiresAt": expiresAt,
-        }},
-        options.Update().SetUpsert(true),
-    )
-    if err != nil {
-        log.Printf("Doğrulama kodu kaydetme hatası: %v", err)
-        http.Error(w, "Doğrulama kodu gönderilemedi", http.StatusInternalServerError)
-        return
-    }
+	_, err = verificationCollection.UpdateOne(
+		context.Background(),
+		bson.M{"email": req.Email},
+		bson.M{"$set": bson.M{
+			"code":      code,
+			"expiresAt": expiresAt,
+		}},
+		options.Update().SetUpsert(true),
+	)
+	if err != nil {
+		log.Printf("Doğrulama kodu kaydetme hatası: %v", err)
+		http.Error(w, "Doğrulama kodu gönderilemedi", http.StatusInternalServerError)
+		return
+	}
 
-    go func() {
-        from := os.Getenv("SMTP_USER")
-        password := os.Getenv("SMTP_PASSWORD")
-        host := os.Getenv("SMTP_HOST")
-        port := os.Getenv("SMTP_PORT")
-        
-        if from == "" || password == "" || host == "" || port == "" {
-            log.Println("Hata: SMTP ortam değişkenleri tanımlanmamış.")
-            return
-        }
+	go func() {
+		mailBody := fmt.Sprintf("Merhaba,\n\nDoğrulama kodunuz: %s\n\nBu kod 3 dakika içinde geçerliliğini yitirecektir.\n\nİyi günler.", code)
+		err = sendEmail(req.Email, "Hesap Doğrulama Kodunuz", mailBody)
+		if err != nil {
+			log.Printf("E-posta gönderim hatası (asenkron): %v", err)
+		} else {
+			log.Printf("Doğrulama kodu başarıyla gönderildi: %s", req.Email)
+		}
+	}()
 
-        mailBody := fmt.Sprintf("Merhaba,\n\nDoğrulama kodunuz: %s\n\nBu kod 3 dakika içinde geçerliliğini yitirecektir.\n\nİyi günler.", code)
-        msg := "From: " + from + "\n" +
-            "To: " + req.Email + "\n" +
-            "Subject: Hesap Doğrulama Kodunuz\n\n" +
-            mailBody
-        auth := smtp.PlainAuth("", from, password, host)
-        addr := host + ":" + port
-
-        err = smtp.SendMail(addr, auth, from, []string{req.Email}, []byte(msg))
-        if err != nil {
-            log.Printf("E-posta gönderim hatası (asenkron): %v", err)
-        } else {
-            log.Printf("Doğrulama kodu başarıyla gönderildi: %s", req.Email)
-        }
-    }()
-
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(MessageResponse{Message: "Doğrulama kodu e-mail adresinize başarıyla gönderildi."})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(MessageResponse{Message: "Doğrulama kodu e-mail adresinize başarıyla gönderildi."})
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-    if r.Method == http.MethodOptions {
-        w.WriteHeader(http.StatusOK)
-        return
-    }
-    if r.Method != http.MethodPost {
-        http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
-        return
-    }
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
+		return
+	}
 
-    var req LoginRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
-        return
-    }
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+		return
+	}
 
-    // Kullanıcıyı veritabanında ara
-    var user User
-    err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email, "provider": "email"}).Decode(&user)
-    if err == mongo.ErrNoDocuments {
-        http.Error(w, "Kullanıcı bulunamadı veya yanlış kimlik doğrulama yöntemi", http.StatusUnauthorized)
-        return
-    } else if err != nil {
-        log.Printf("Veritabanı hatası: %v", err)
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
+	var user User
+	err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email, "provider": "email"}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		http.Error(w, "Kullanıcı bulunamadı veya yanlış kimlik doğrulama yöntemi", http.StatusUnauthorized)
+		return
+	} else if err != nil {
+		log.Printf("Veritabanı hatası: %v", err)
+		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+		return
+	}
 
-    // Şifreyi kontrol et
-    if !checkPasswordHash(req.Sifre, user.Sifre) {
-        http.Error(w, "Hatalı şifre", http.StatusUnauthorized)
-        return
-    }
+	if !checkPasswordHash(req.Sifre, user.Sifre) {
+		http.Error(w, "Hatalı şifre", http.StatusUnauthorized)
+		return
+	}
 
-    // Başarılı giriş
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(map[string]string{
-        "status":  "success",
-        "message": "Giriş başarılı",
-    })
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"message": "Giriş başarılı",
+	})
 }
 
 func registerHandler(w http.ResponseWriter, r *http.Request) {
-    startTime := time.Now()
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
+		return
+	}
 
-    w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-    if r.Method == http.MethodOptions {
-        w.WriteHeader(http.StatusOK)
-        return
-    }
-    if r.Method != http.MethodPost {
-        http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
-        return
-    }
+	var req RegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+		return
+	}
 
-    var req RegisterRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
-        return
-    }
+	var verCode VerificationCode
+	err := verificationCollection.FindOne(context.Background(), bson.M{"email": req.Email}).Decode(&verCode)
+	if err != nil {
+		http.Error(w, "Doğrulama kodu geçersiz veya süresi dolmuş", http.StatusUnauthorized)
+		return
+	}
 
-    // Doğrulama kodu kontrolü
-    startStep1 := time.Now()
-    var verCode VerificationCode
-    err := verificationCollection.FindOne(context.Background(), bson.M{"email": req.Email}).Decode(&verCode)
-    if err != nil {
-        http.Error(w, "Doğrulama kodu geçersiz veya süresi dolmuş", http.StatusUnauthorized)
-        return
-    }
-    log.Printf("Adım 1: FindOne süresi: %v", time.Since(startStep1))
+	if verCode.Code != req.VerificationCode || time.Now().After(verCode.ExpiresAt) {
+		http.Error(w, "Doğrulama kodu geçersiz veya süresi dolmuş", http.StatusUnauthorized)
+		return
+	}
 
-    if verCode.Code != req.VerificationCode || time.Now().After(verCode.ExpiresAt) {
-        http.Error(w, "Doğrulama kodu geçersiz veya süresi dolmuş", http.StatusUnauthorized)
-        return
-    }
+	hashedPassword, err := hashPassword(req.Sifre)
+	if err != nil {
+		log.Printf("Şifre şifreleme hatası: %v", err)
+		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+		return
+	}
 
-    // Şifre şifreleme
-    hashedPassword, err := hashPassword(req.Sifre)
-    if err != nil {
-        log.Printf("Şifre şifreleme hatası: %v", err)
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
+	newUser := User{
+		Ad:          req.Ad,
+		Soyad:       req.Soyad,
+		Telefon:     req.Telefon,
+		DogumTarihi: req.DogumTarihi,
+		Email:       req.Email,
+		Sifre:       hashedPassword,
+		Provider:    "email",
+		CreatedAt:   time.Now(),
+	}
 
-    newUser := User{
-        Ad:          req.Ad,
-        Soyad:       req.Soyad,
-        Telefon:     req.Telefon,
-        DogumTarihi: req.DogumTarihi,
-        Email:       req.Email,
-        Sifre:       hashedPassword,
-        Provider:    "email", // E-posta ile kayıt olduğu için 'email'
-        CreatedAt:   time.Now(),
-    }
+	_, err = usersCollection.InsertOne(context.Background(), newUser)
+	if err != nil {
+		log.Printf("Kullanıcı kaydetme hatası: %v", err)
+		http.Error(w, "Kayıt işlemi başarısız oldu", http.StatusInternalServerError)
+		return
+	}
 
-    startStep2 := time.Now()
-    _, err = usersCollection.InsertOne(context.Background(), newUser)
-    if err != nil {
-        log.Printf("Kullanıcı kaydetme hatası: %v", err)
-        http.Error(w, "Kayıt işlemi başarısız oldu", http.StatusInternalServerError)
-        return
-    }
-    log.Printf("Adım 2: InsertOne süresi: %v", time.Since(startStep2))
-    startStep3 := time.Now()
-    _, err = verificationCollection.DeleteOne(context.Background(), bson.M{"email": req.Email})
-    if err != nil {
-        log.Printf("Doğrulama kodu silme hatası: %v", err)
-    }
-    log.Printf("Adım 3: DeleteOne süresi: %v", time.Since(startStep3))
+	_, err = verificationCollection.DeleteOne(context.Background(), bson.M{"email": req.Email})
+	if err != nil {
+		log.Printf("Doğrulama kodu silme hatası: %v", err)
+	}
 
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusCreated)
-    json.NewEncoder(w).Encode(MessageResponse{Message: "Kayıt işlemi başarıyla tamamlandı."})
-
-    log.Printf("Toplam kayıt işlemi süresi: %v", time.Since(startTime))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(MessageResponse{Message: "Kayıt işlemi başarıyla tamamlandı."})
 }
 
 func googleLoginHandler(w http.ResponseWriter, r *http.Request) {
-    url := googleOAuthConfig.AuthCodeURL("random-state", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
-    http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	url := googleOAuthConfig.AuthCodeURL("random-state", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
-    state := r.FormValue("state")
-    if state != "random-state" {
-        http.Error(w, "State geçersiz", http.StatusBadRequest)
-        return
-    }
+	state := r.FormValue("state")
+	if state != "random-state" {
+		http.Error(w, "State geçersiz", http.StatusBadRequest)
+		return
+	}
 
-    code := r.FormValue("code")
-    token, err := googleOAuthConfig.Exchange(context.Background(), code)
-    if err != nil {
-        log.Printf("Token hatası: %v", err)
-        http.Error(w, "Token alınamadı", http.StatusInternalServerError)
-        return
-    }
+	code := r.FormValue("code")
+	token, err := googleOAuthConfig.Exchange(context.Background(), code)
+	if err != nil {
+		log.Printf("Token hatası: %v", err)
+		http.Error(w, "Token alınamadı", http.StatusInternalServerError)
+		return
+	}
 
-    client := googleOAuthConfig.Client(context.Background(), token)
-    resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-    if err != nil {
-        log.Printf("Google API hatası: %v", err)
-        http.Error(w, "Kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
-        return
-    }
-    defer resp.Body.Close()
+	client := googleOAuthConfig.Client(context.Background(), token)
+	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		log.Printf("Google API hatası: %v", err)
+		http.Error(w, "Kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
 
-    googleUser := GoogleUser{}
-    err = json.NewDecoder(resp.Body).Decode(&googleUser)
-    if err != nil {
-        log.Printf("JSON çözme hatası: %v", err)
-        http.Error(w, "Kullanıcı bilgileri çözülemedi", http.StatusInternalServerError)
-        return
-    }
+	googleUser := GoogleUser{}
+	err = json.NewDecoder(resp.Body).Decode(&googleUser)
+	if err != nil {
+		log.Printf("JSON çözme hatası: %v", err)
+		http.Error(w, "Kullanıcı bilgileri çözülemedi", http.StatusInternalServerError)
+		return
+	}
 
-    // Kullanıcıyı veritabanında ara
-    var user User
-    err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&user)
-    if err == nil {
-        // Kullanıcı zaten var, giriş başarılı mesajı gönder
-        http.Redirect(w, r, "https://etkinlikuygulamasi.onrender.com/google-success", http.StatusFound)
-        return
-    } else if err == mongo.ErrNoDocuments {
-        // Yeni kullanıcı, veritabanına kaydet
-        newUser := User{
-            Ad:        googleUser.GivenName,
-            Soyad:     googleUser.FamilyName,
-            Email:     googleUser.Email,
-            Provider:  "google",
-            SocialID:  googleUser.Email,
-            CreatedAt: time.Now(),
-        }
-        _, err = usersCollection.InsertOne(context.Background(), newUser)
-        if err != nil {
-            log.Printf("Yeni kullanıcı kaydetme hatası: %v", err)
-            http.Error(w, "Kayıt başarısız", http.StatusInternalServerError)
-            return
-        }
-        // Başarılı giriş, mobil uygulamanın URL şemasına yönlendir
-http.Redirect(w, r, "etkinlikuygulamasi://login/success", http.StatusFound)
-        return
-    } else {
-        log.Printf("Veritabanı hatası: %v", err)
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
+	var user User
+	err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		newUser := User{
+			Ad:          googleUser.GivenName,
+			Soyad:       googleUser.FamilyName,
+			Email:       googleUser.Email,
+			Provider:    "google",
+			SocialID:    googleUser.Email,
+			CreatedAt:   time.Now(),
+		}
+		_, err = usersCollection.InsertOne(context.Background(), newUser)
+		if err != nil {
+			log.Printf("Yeni kullanıcı kaydetme hatası: %v", err)
+			http.Error(w, "Kayıt başarısız", http.StatusInternalServerError)
+			return
+		}
+	} else if err != nil {
+		log.Printf("Veritabanı hatası: %v", err)
+		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "etkinlikuygulamasi://login/success", http.StatusFound)
 }
 
-
-// auth.go
 // Facebook girişini başlatan handler
 func facebookLoginHandler(w http.ResponseWriter, r *http.Request) {
-    url := facebookOAuthConfig.AuthCodeURL("state") // "state" güvenliği için kullanılır
-    http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	url := facebookOAuthConfig.AuthCodeURL("state")
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 // Facebook'tan gelen callback'i işleyen handler
 func facebookCallbackHandler(w http.ResponseWriter, r *http.Request) {
-    state := r.FormValue("state")
-    if state != "state" {
-        http.Error(w, "Geçersiz durum (state)", http.StatusBadRequest)
-        return
-    }
+	state := r.FormValue("state")
+	if state != "state" {
+		http.Error(w, "Geçersiz durum (state)", http.StatusBadRequest)
+		return
+	}
 
-    code := r.FormValue("code")
-    if code == "" {
-        http.Error(w, "Code parametresi eksik", http.StatusBadRequest)
-        return
-    }
+	code := r.FormValue("code")
+	if code == "" {
+		http.Error(w, "Code parametresi eksik", http.StatusBadRequest)
+		return
+	}
 
-    token, err := facebookOAuthConfig.Exchange(context.Background(), code)
-    if err != nil {
-        log.Printf("Token değişimi hatası: %v", err)
-        http.Error(w, "Token değişimi başarısız oldu", http.StatusInternalServerError)
-        return
-    }
+	token, err := facebookOAuthConfig.Exchange(context.Background(), code)
+	if err != nil {
+		log.Printf("Token değişimi hatası: %v", err)
+		http.Error(w, "Token değişimi başarısız oldu", http.StatusInternalServerError)
+		return
+	}
 
-    resp, err := http.Get("https://graph.facebook.com/v10.0/me?fields=id,name,email,picture&access_token=" + token.AccessToken)
-    if err != nil {
-        log.Printf("Facebook API çağrısı hatası: %v", err)
-        http.Error(w, "Facebook kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
-        return
-    }
-    defer resp.Body.Close()
+	resp, err := http.Get("https://graph.facebook.com/v10.0/me?fields=id,name,email,picture&access_token=" + token.AccessToken)
+	if err != nil {
+		log.Printf("Facebook API çağrısı hatası: %v", err)
+		http.Error(w, "Facebook kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
 
-    var fbUser FacebookUser
-    body, _ := ioutil.ReadAll(resp.Body)
-    if err := json.Unmarshal(body, &fbUser); err != nil {
-        log.Printf("JSON ayrıştırma hatası: %v", err)
-        http.Error(w, "Kullanıcı bilgileri ayrıştırılamadı", http.StatusInternalServerError)
-        return
-    }
+	var fbUser FacebookUser
+	body, err := io.ReadAll(resp.Body) // ioutil.ReadAll yerine io.ReadAll kullanıldı
+	if err != nil {
+		log.Printf("Vücut okuma hatası: %v", err)
+		http.Error(w, "Kullanıcı bilgileri okunamadı", http.StatusInternalServerError)
+		return
+	}
+	if err := json.Unmarshal(body, &fbUser); err != nil {
+		log.Printf("JSON ayrıştırma hatası: %v", err)
+		http.Error(w, "Kullanıcı bilgileri ayrıştırılamadı", http.StatusInternalServerError)
+		return
+	}
 
-    // Kullanıcıyı veritabanında ara
-    var user User
-    err = usersCollection.FindOne(context.Background(), bson.M{"email": fbUser.Email, "provider": "facebook"}).Decode(&user)
-    if err == mongo.ErrNoDocuments {
-        // Yeni kullanıcı, veritabanına kaydet
-        newUser := User{
-            Ad:          fbUser.Name,
-            Email:       fbUser.Email,
-            Provider:    "facebook",
-            SocialID:    fbUser.ID,
-            CreatedAt:   time.Now(),
-        }
-        _, err := usersCollection.InsertOne(context.Background(), newUser)
-        if err != nil {
-            log.Printf("Facebook kullanıcısı kaydetme hatası: %v", err)
-            http.Error(w, "Kullanıcı kaydedilemedi", http.StatusInternalServerError)
-            return
-        }
-        log.Printf("Yeni Facebook kullanıcısı kaydedildi: %s", fbUser.Email)
-    } else if err != nil {
-        log.Printf("Veritabanı hatası: %v", err)
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
+	var user User
+	err = usersCollection.FindOne(context.Background(), bson.M{"email": fbUser.Email, "provider": "facebook"}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		newUser := User{
+			Ad:        fbUser.Name,
+			Email:     fbUser.Email,
+			Provider:  "facebook",
+			SocialID:  fbUser.ID,
+			CreatedAt: time.Now(),
+		}
+		_, err := usersCollection.InsertOne(context.Background(), newUser)
+		if err != nil {
+			log.Printf("Facebook kullanıcısı kaydetme hatası: %v", err)
+			http.Error(w, "Kullanıcı kaydedilemedi", http.StatusInternalServerError)
+			return
+		}
+		log.Printf("Yeni Facebook kullanıcısı kaydedildi: %s", fbUser.Email)
+	} else if err != nil {
+		log.Printf("Veritabanı hatası: %v", err)
+		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+		return
+	}
 
-    // Başarılı giriş/kayıt, mobil uygulamaya yönlendir
-    http.Redirect(w, r, "etkinlikuygulamasi://login/success", http.StatusFound)
+	http.Redirect(w, r, "etkinlikuygulamasi://login/success", http.StatusFound)
 }
-
-
-// auth.go
 
 // Şifre sıfırlama kodu gönderme handler'ı
 func sendPasswordResetCodeHandler(w http.ResponseWriter, r *http.Request) {
-    var req SendCodeRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
-        return
-    }
+	var req SendCodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+		return
+	}
 
-    // Kullanıcının sistemde kayıtlı olup olmadığını kontrol et
-    var user User
-    err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email, "provider": "email"}).Decode(&user)
-    if err == mongo.ErrNoDocuments {
-        http.Error(w, "Kullanıcı bulunamadı", http.StatusNotFound)
-        return
-    } else if err != nil {
-        log.Printf("Veritabanı hatası: %v", err)
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
+	var user User
+	err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email, "provider": "email"}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		http.Error(w, "Kullanıcı bulunamadı", http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("Veritabanı hatası: %v", err)
+		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+		return
+	}
 
-    // Doğrulama kodu oluştur ve e-posta ile gönder
-    verificationCode := generateVerificationCode()
-    err = sendEmail(req.Email, "Şifre Sıfırlama Kodunuz", fmt.Sprintf("Şifre sıfırlama kodunuz: %s", verificationCode))
-    if err != nil {
-        log.Printf("E-posta gönderme hatası: %v", err)
-        http.Error(w, "E-posta gönderme başarısız", http.StatusInternalServerError)
-        return
-    }
+	verificationCode := generateVerificationCode()
+	err = sendEmail(req.Email, "Şifre Sıfırlama Kodunuz", fmt.Sprintf("Şifre sıfırlama kodunuz: %s", verificationCode))
+	if err != nil {
+		log.Printf("E-posta gönderme hatası: %v", err)
+		http.Error(w, "E-posta gönderme başarısız", http.StatusInternalServerError)
+		return
+	}
 
-    // Kodu veritabanına kaydet veya güncelle
-    // Not: verificationCollection'ı `types.go` ve `main.go`'ya eklemeniz gerekir
-    _, err = verificationCollection.UpdateOne(
-        context.Background(),
-        bson.M{"email": req.Email},
-        bson.M{
-            "$set": bson.M{
-                "email": req.Email,
-                "code": verificationCode,
-                "expiresAt": time.Now().Add(10 * time.Minute), // 10 dakika geçerlilik süresi
-            },
-        },
-        options.Update().SetUpsert(true),
-    )
-    if err != nil {
-        log.Printf("Doğrulama kodu kaydetme hatası: %v", err)
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
+	_, err = verificationCollection.UpdateOne(
+		context.Background(),
+		bson.M{"email": req.Email},
+		bson.M{
+			"$set": bson.M{
+				"email":     req.Email,
+				"code":      verificationCode,
+				"expiresAt": time.Now().Add(10 * time.Minute), // 10 dakika geçerlilik süresi
+			},
+		},
+		options.Update().SetUpsert(true),
+	)
+	if err != nil {
+		log.Printf("Doğrulama kodu kaydetme hatası: %v", err)
+		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+		return
+	}
 
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(MessageResponse{Message: "Şifre sıfırlama kodu gönderildi"})
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(MessageResponse{Message: "Şifre sıfırlama kodu gönderildi"})
 }
 
 // Şifre sıfırlama handler'ı
 func resetPasswordHandler(w http.ResponseWriter, r *http.Request) {
-    var req ResetPasswordRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
-        return
-    }
+	var req ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+		return
+	}
 
-    // Kodu ve e-postayı veritabanından kontrol et
-    var storedCode VerificationCode
-    err := verificationCollection.FindOne(context.Background(), bson.M{"email": req.Email, "code": req.Code}).Decode(&storedCode)
-    if err == mongo.ErrNoDocuments || time.Now().After(storedCode.ExpiresAt) {
-        http.Error(w, "Geçersiz veya süresi dolmuş kod", http.StatusUnauthorized)
-        return
-    } else if err != nil {
-        log.Printf("Veritabanı hatası: %v", err)
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
+	var storedCode VerificationCode
+	err := verificationCollection.FindOne(context.Background(), bson.M{"email": req.Email, "code": req.Code}).Decode(&storedCode)
+	if err == mongo.ErrNoDocuments || time.Now().After(storedCode.ExpiresAt) {
+		http.Error(w, "Geçersiz veya süresi dolmuş kod", http.StatusUnauthorized)
+		return
+	} else if err != nil {
+		log.Printf("Veritabanı hatası: %v", err)
+		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+		return
+	}
 
-    // Yeni şifreyi hash'le ve güncelle
-    hashedPassword, err := hashPassword(req.NewPassword)
-    if err != nil {
-        http.Error(w, "Şifre şifreleme hatası", http.StatusInternalServerError)
-        return
-    }
+	hashedPassword, err := hashPassword(req.NewPassword)
+	if err != nil {
+		http.Error(w, "Şifre şifreleme hatası", http.StatusInternalServerError)
+		return
+	}
 
-    _, err = usersCollection.UpdateOne(
-        context.Background(),
-        bson.M{"email": req.Email},
-        bson.M{"$set": bson.M{"sifre": hashedPassword}},
-    )
-    if err != nil {
-        log.Printf("Şifre güncelleme hatası: %v", err)
-        http.Error(w, "Şifre güncellenemedi", http.StatusInternalServerError)
-        return
-    }
+	_, err = usersCollection.UpdateOne(
+		context.Background(),
+		bson.M{"email": req.Email},
+		bson.M{"$set": bson.M{"sifre": hashedPassword}},
+	)
+	if err != nil {
+		log.Printf("Şifre güncelleme hatası: %v", err)
+		http.Error(w, "Şifre güncellenemedi", http.StatusInternalServerError)
+		return
+	}
 
-    // Kodun kullanılmasını engellemek için veritabanından sil
-    _, err = verificationCollection.DeleteOne(context.Background(), bson.M{"email": req.Email})
-    if err != nil {
-        log.Printf("Doğrulama kodu silme hatası: %v", err)
-    }
+	_, err = verificationCollection.DeleteOne(context.Background(), bson.M{"email": req.Email})
+	if err != nil {
+		log.Printf("Doğrulama kodu silme hatası: %v", err)
+	}
 
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(MessageResponse{Message: "Şifreniz başarıyla sıfırlandı."})
-}
-
-// Yeni bir yapı oluşturun: ResetPasswordRequest
-type ResetPasswordRequest struct {
-	Email       string `json:"email"`
-	Code        string `json:"code"`
-	NewPassword string `json:"newPassword"`
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(MessageResponse{Message: "Şifreniz başarıyla sıfırlandı."})
 }
