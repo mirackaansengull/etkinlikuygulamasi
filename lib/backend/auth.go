@@ -329,7 +329,8 @@ func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
             http.Error(w, "Kayıt başarısız", http.StatusInternalServerError)
             return
         }
-        http.Redirect(w, r, "https://etkinlikuygulamasi.onrender.com/google-success", http.StatusFound)
+        // Başarılı giriş, mobil uygulamanın URL şemasına yönlendir
+http.Redirect(w, r, "etkinlikuygulamasi://login/success", http.StatusFound)
         return
     } else {
         log.Printf("Veritabanı hatası: %v", err)

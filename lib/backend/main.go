@@ -19,10 +19,7 @@ func main() {
 	r.HandleFunc("/login", loginHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/register", registerHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/auth/google/login", googleLoginHandler).Methods("GET", "OPTIONS")
-r.HandleFunc("/auth/google/callback", googleCallbackHandler).Methods("GET", "OPTIONS")
-r.HandleFunc("/google-success", func(w http.ResponseWriter, r *http.Request) {
-    w.Write([]byte("Giriş başarılı! Uygulamaya geri dönebilirsiniz."))
-}).Methods("GET")
+	r.HandleFunc("/auth/google/callback", googleCallbackHandler).Methods("GET", "OPTIONS")
 
 	
 

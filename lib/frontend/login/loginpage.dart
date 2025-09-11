@@ -1,10 +1,13 @@
-import 'package:etkinlikuygulamasi/frontend/login/registerpage.dart';
-import 'package:etkinlikuygulamasi/frontend/home/homepage.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:http/http.dart' as http;
+import 'dart:async';
 import 'dart:convert';
+import 'package:etkinlikuygulamasi/frontend/home/homepage.dart';
+import 'package:etkinlikuygulamasi/frontend/login/registerpage.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+import 'package:app_links/app_links.dart';
 
 class Loginpage extends StatefulWidget {
   const Loginpage({super.key});
@@ -17,6 +20,42 @@ class _LoginpageState extends State<Loginpage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _rememberMe = false;
+
+  final _appLinks = AppLinks();
+  StreamSubscription<Uri>? _appLinksSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAppLinks();
+  }
+
+  Future<void> _initAppLinks() async {
+    // Uygulama kapalıyken gelen ilk URL'yi al
+    try {
+      final appLink = await _appLinks.getInitialAppLink();
+      if (appLink != null && appLink.path == '/success') {
+        _navigateToHomepage();
+      }
+    } on PlatformException {
+      // Hata oluşursa
+      debugPrint('Initial app link alırken hata oluştu.');
+    }
+
+    // Uygulama açıkken gelen URL'leri dinle
+    _appLinksSubscription = _appLinks.uriLinkStream.listen((uri) {
+      if (uri.path == '/success' && mounted) {
+        _navigateToHomepage();
+      }
+    });
+  }
+
+  void _navigateToHomepage() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const Homepage()),
+    );
+  }
 
   // E-posta ve şifre ile giriş için handler
   Future<void> _loginHandler(BuildContext context) async {
@@ -36,13 +75,8 @@ class _LoginpageState extends State<Loginpage> {
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
         if (responseData['status'] == 'success') {
-          // Başarılı giriş, HomePage'e yönlendir
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const Homepage()),
-          );
+          _navigateToHomepage();
         } else {
-          // Hata mesajı göster
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(responseData['message'] ?? 'Giriş başarısız'),
@@ -63,29 +97,12 @@ class _LoginpageState extends State<Loginpage> {
   }
 
   // Google Giriş için URL'yi başlatma fonksiyonu
-  // loginpage.dart dosyasında _LoginpageState sınıfı içine
   void _launchGoogleLogin(BuildContext context) async {
     final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
     final Uri url = Uri.parse('$serverUrl/auth/google/login');
 
     if (await canLaunchUrl(url)) {
-      bool success = await launchUrl(
-        url,
-        mode: LaunchMode.inAppBrowserView,
-        webOnlyWindowName: '_self', // Web'de aynı pencerede açmak için
-      );
-
-      if (success) {
-        // Başarılı giriş, ana sayfaya yönlendir
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const Homepage()),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Google giriş akışı başlatılamadı.')),
-        );
-      }
+      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
     } else {
       ScaffoldMessenger.of(
         context,
@@ -103,14 +120,14 @@ class _LoginpageState extends State<Loginpage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Image.asset('images/eventra.png', width: 150.w, height: 150.h),
-              // 1. Email Girişi
+              SizedBox(height: 16.h),
               TextField(
                 controller: _emailController,
                 decoration: InputDecoration(
+                  labelText: 'Email',
                   labelStyle: const TextStyle(
                     color: Color.fromARGB(255, 17, 48, 82),
                   ),
-                  labelText: 'Email',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(5.r),
                   ),
@@ -124,16 +141,14 @@ class _LoginpageState extends State<Loginpage> {
                 ),
               ),
               SizedBox(height: 16.h),
-
-              // 2. Şifre Girişi
               TextField(
                 controller: _passwordController,
                 obscureText: true,
                 decoration: InputDecoration(
+                  labelText: 'Şifre',
                   labelStyle: const TextStyle(
                     color: Color.fromARGB(255, 17, 48, 82),
                   ),
-                  labelText: 'Şifre',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(5.r),
                   ),
@@ -147,8 +162,6 @@ class _LoginpageState extends State<Loginpage> {
                 ),
               ),
               SizedBox(height: 8.h),
-
-              // 3. Şifremi Unuttum & Beni Hatırla
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -175,8 +188,6 @@ class _LoginpageState extends State<Loginpage> {
                 ],
               ),
               SizedBox(height: 24.h),
-
-              // 4. Giriş Butonu
               ElevatedButton(
                 onPressed: () => _loginHandler(context),
                 style: ElevatedButton.styleFrom(
@@ -192,8 +203,6 @@ class _LoginpageState extends State<Loginpage> {
                 ),
               ),
               SizedBox(height: 24.h),
-
-              // 5. '-- VEYA --' Metni
               const Row(
                 children: [
                   Expanded(child: Divider()),
@@ -205,8 +214,6 @@ class _LoginpageState extends State<Loginpage> {
                 ],
               ),
               SizedBox(height: 24.h),
-
-              // 6. Google ve Facebook Butonları
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -269,6 +276,7 @@ class _LoginpageState extends State<Loginpage> {
 
   @override
   void dispose() {
+    _appLinksSubscription?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
