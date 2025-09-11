@@ -270,3 +270,71 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
     log.Printf("Toplam kayıt işlemi süresi: %v", time.Since(startTime))
 }
 
+func googleLoginHandler(w http.ResponseWriter, r *http.Request) {
+    url := googleOAuthConfig.AuthCodeURL("random-state", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+    http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
+func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
+    state := r.FormValue("state")
+    if state != "random-state" {
+        http.Error(w, "State geçersiz", http.StatusBadRequest)
+        return
+    }
+
+    code := r.FormValue("code")
+    token, err := googleOAuthConfig.Exchange(context.Background(), code)
+    if err != nil {
+        log.Printf("Token hatası: %v", err)
+        http.Error(w, "Token alınamadı", http.StatusInternalServerError)
+        return
+    }
+
+    client := googleOAuthConfig.Client(context.Background(), token)
+    resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+    if err != nil {
+        log.Printf("Google API hatası: %v", err)
+        http.Error(w, "Kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
+        return
+    }
+    defer resp.Body.Close()
+
+    googleUser := GoogleUser{}
+    err = json.NewDecoder(resp.Body).Decode(&googleUser)
+    if err != nil {
+        log.Printf("JSON çözme hatası: %v", err)
+        http.Error(w, "Kullanıcı bilgileri çözülemedi", http.StatusInternalServerError)
+        return
+    }
+
+    // Kullanıcıyı veritabanında ara
+    var user User
+    err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&user)
+    if err == nil {
+        // Kullanıcı zaten var, giriş başarılı mesajı gönder
+        http.Redirect(w, r, "https://etkinlikuygulamasi.onrender.com/google-success", http.StatusFound)
+        return
+    } else if err == mongo.ErrNoDocuments {
+        // Yeni kullanıcı, veritabanına kaydet
+        newUser := User{
+            Ad:        googleUser.GivenName,
+            Soyad:     googleUser.FamilyName,
+            Email:     googleUser.Email,
+            Provider:  "google",
+            SocialID:  googleUser.Email,
+            CreatedAt: time.Now(),
+        }
+        _, err = usersCollection.InsertOne(context.Background(), newUser)
+        if err != nil {
+            log.Printf("Yeni kullanıcı kaydetme hatası: %v", err)
+            http.Error(w, "Kayıt başarısız", http.StatusInternalServerError)
+            return
+        }
+        http.Redirect(w, r, "https://etkinlikuygulamasi.onrender.com/google-success", http.StatusFound)
+        return
+    } else {
+        log.Printf("Veritabanı hatası: %v", err)
+        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+        return
+    }
+}

@@ -63,23 +63,33 @@ class _LoginpageState extends State<Loginpage> {
   }
 
   // Google Giriş için URL'yi başlatma fonksiyonu
+  // loginpage.dart dosyasında _LoginpageState sınıfı içine
   void _launchGoogleLogin(BuildContext context) async {
     final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
     final Uri url = Uri.parse('$serverUrl/auth/google/login');
 
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-      } else {
-        ScaffoldMessenger.of(
+    if (await canLaunchUrl(url)) {
+      bool success = await launchUrl(
+        url,
+        mode: LaunchMode.inAppBrowserView,
+        webOnlyWindowName: '_self', // Web'de aynı pencerede açmak için
+      );
+
+      if (success) {
+        // Başarılı giriş, ana sayfaya yönlendir
+        Navigator.pushReplacement(
           context,
-        ).showSnackBar(SnackBar(content: Text('URL açılamadı: $url')));
+          MaterialPageRoute(builder: (context) => const Homepage()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Google giriş akışı başlatılamadı.')),
+        );
       }
-    } catch (e) {
-      debugPrint('Hata: $e');
+    } else {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Bir hata oluştu: $e')));
+      ).showSnackBar(SnackBar(content: Text('URL açılamadı: $url')));
     }
   }
 

@@ -14,15 +14,17 @@ func main() {
 	InitMongoDB()
 
 	r := mux.NewRouter()
+	r.HandleFunc("/health", healthHandler).Methods("GET", "OPTIONS")
 	r.HandleFunc("/send-code", sendCodeHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/login", loginHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/register", registerHandler).Methods("POST", "OPTIONS")
-	r.HandleFunc("/auth/google/callback", handleGoogleCallback).Methods("GET")
-	r.HandleFunc("/auth/google/login", handleGoogleLogin).Methods("GET")
-	r.HandleFunc("/auth/google/verify", handleGoogleTokenVerification).Methods("POST") 
-	r.HandleFunc("/auth/facebook/callback", handleFacebookCallback).Methods("GET")
+	r.HandleFunc("/auth/google/login", googleLoginHandler).Methods("GET", "OPTIONS")
+r.HandleFunc("/auth/google/callback", googleCallbackHandler).Methods("GET", "OPTIONS")
+r.HandleFunc("/google-success", func(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("Giriş başarılı! Uygulamaya geri dönebilirsiniz."))
+}).Methods("GET")
 
-	r.HandleFunc("/health", healthHandler).Methods("GET", "OPTIONS")
+	
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
