@@ -372,54 +372,7 @@ func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
     // Flutter uygulamasına token'ı ve login tipini içeren derin bağlantı URL'si ile yönlendirin
     redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s&type=google", jwtToken)
     log.Printf("Flutter'a yönlendiriliyor: %s", redirectURL)
-    
-    // Alternatif: HTML sayfası ile token'ı göster ve kullanıcıya kopyalama seçeneği sun
-    htmlResponse := fmt.Sprintf(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Giriş Başarılı</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-            .container { max-width: 400px; margin: 0 auto; }
-            .success { color: green; font-size: 24px; margin-bottom: 20px; }
-            .token { background: #f0f0f0; padding: 10px; border-radius: 5px; word-break: break-all; margin: 20px 0; }
-            .button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
-            .redirect-info { margin-top: 20px; font-size: 14px; color: #666; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="success">✅ Giriş Başarılı!</div>
-            <p>Google hesabınızla başarıyla giriş yaptınız.</p>
-            <p>Uygulamaya geri dönün veya aşağıdaki token'ı kopyalayın:</p>
-            <div class="token" id="token">%s</div>
-            <button class="button" onclick="copyToken()">Token'ı Kopyala</button>
-            <div class="redirect-info">
-                <p>Otomatik yönlendirme çalışmıyorsa uygulamayı manuel olarak açın.</p>
-                <p><a href="%s">Uygulamayı Aç</a></p>
-            </div>
-        </div>
-        <script>
-            function copyToken() {
-                const token = document.getElementById('token').textContent;
-                navigator.clipboard.writeText(token).then(function() {
-                    alert('Token kopyalandı!');
-                });
-            }
-            
-            // 3 saniye sonra otomatik yönlendirme dene
-            setTimeout(function() {
-                window.location.href = '%s';
-            }, 3000);
-        </script>
-    </body>
-    </html>`, jwtToken, redirectURL, redirectURL)
-    
-    w.Header().Set("Content-Type", "text/html")
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte(htmlResponse))
+    http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
 // Facebook girişini başlatan handler
@@ -503,54 +456,8 @@ func facebookCallbackHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Flutter uygulamasına token'ı ve login tipini içeren derin bağlantı URL'si ile yönlendirin
 	redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s&type=facebook", jwtToken)
-	
-	// HTML sayfası ile token'ı göster
-	htmlResponse := fmt.Sprintf(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Giriş Başarılı</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-            .container { max-width: 400px; margin: 0 auto; }
-            .success { color: green; font-size: 24px; margin-bottom: 20px; }
-            .token { background: #f0f0f0; padding: 10px; border-radius: 5px; word-break: break-all; margin: 20px 0; }
-            .button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
-            .redirect-info { margin-top: 20px; font-size: 14px; color: #666; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="success">✅ Giriş Başarılı!</div>
-            <p>Facebook hesabınızla başarıyla giriş yaptınız.</p>
-            <p>Uygulamaya geri dönün veya aşağıdaki token'ı kopyalayın:</p>
-            <div class="token" id="token">%s</div>
-            <button class="button" onclick="copyToken()">Token'ı Kopyala</button>
-            <div class="redirect-info">
-                <p>Otomatik yönlendirme çalışmıyorsa uygulamayı manuel olarak açın.</p>
-                <p><a href="%s">Uygulamayı Aç</a></p>
-            </div>
-        </div>
-        <script>
-            function copyToken() {
-                const token = document.getElementById('token').textContent;
-                navigator.clipboard.writeText(token).then(function() {
-                    alert('Token kopyalandı!');
-                });
-            }
-            
-            // 3 saniye sonra otomatik yönlendirme dene
-            setTimeout(function() {
-                window.location.href = '%s';
-            }, 3000);
-        </script>
-    </body>
-    </html>`, jwtToken, redirectURL, redirectURL)
-    
-    w.Header().Set("Content-Type", "text/html")
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte(htmlResponse))
+	log.Printf("Flutter'a yönlendiriliyor: %s", redirectURL)
+	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
 // verifyTokenHandler, gönderilen token'ı doğrular ve geçerliyse kullanıcı bilgilerini döndürür

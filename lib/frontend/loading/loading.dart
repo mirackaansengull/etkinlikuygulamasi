@@ -7,7 +7,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_links/app_links.dart';
-import 'package:flutter/services.dart';
 
 class LoadingPage extends StatefulWidget {
   const LoadingPage({super.key});
@@ -69,17 +68,38 @@ class _LoadingPageState extends State<LoadingPage> with WidgetsBindingObserver {
   Future<void> _initializeApp() async {
     debugPrint('🚀 Uygulama başlatılıyor...');
 
-    // Önce deep link kontrolü yap
+    // Deep link listener'ı hemen başlat
+    _startDeepLinkListener();
+
+    // Kısa bir gecikme sonra deep link kontrolü yap
+    await Future.delayed(const Duration(milliseconds: 500));
     final hasDeepLink = await _checkForDeepLink();
 
     // Deep link yoksa normal kontrolleri başlat
     if (!hasDeepLink) {
       debugPrint('📱 Normal kontroller başlatılıyor...');
+      // Periyodik deep link kontrolü başlat
+      _startPeriodicDeepLinkCheck();
       checkConnectionAndLoginStatus();
     }
+  }
 
-    // Deep link listener'ı başlat
-    _startDeepLinkListener();
+  // Periyodik deep link kontrolü
+  void _startPeriodicDeepLinkCheck() {
+    Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (_hasProcessedDeepLink) {
+        timer.cancel();
+        return;
+      }
+
+      final hasDeepLink = await _checkForDeepLink();
+      if (hasDeepLink) {
+        timer.cancel();
+      } else if (timer.tick > 60) {
+        // 60 saniye sonra durdur
+        timer.cancel();
+      }
+    });
   }
 
   // Deep link kontrolü

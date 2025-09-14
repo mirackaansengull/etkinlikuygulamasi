@@ -16,7 +16,7 @@ class Loginpage extends StatefulWidget {
   State<Loginpage> createState() => _LoginpageState();
 }
 
-class _LoginpageState extends State<Loginpage> {
+class _LoginpageState extends State<Loginpage> with WidgetsBindingObserver {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _rememberMe = false;
@@ -24,8 +24,23 @@ class _LoginpageState extends State<Loginpage> {
   @override
   void initState() {
     super.initState();
+    // App lifecycle observer ekle
+    WidgetsBinding.instance.addObserver(this);
     // Kaydedilmiş bilgileri yükle
     _loadSavedCredentials();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    debugPrint('📱 Login sayfası - App lifecycle değişti: $state');
+
+    if (state == AppLifecycleState.resumed) {
+      debugPrint(
+        '🔄 Login sayfası - App resume oldu, token kontrol ediliyor...',
+      );
+      _checkTokenNow();
+    }
   }
 
   // Kaydedilmiş kullanıcı bilgilerini yükle
@@ -150,11 +165,18 @@ class _LoginpageState extends State<Loginpage> {
   // Google login sonrası token kontrolü
   void _startTokenCheckTimer() {
     debugPrint('🔄 Token kontrol timer başlatıldı');
-    Timer.periodic(const Duration(seconds: 2), (timer) async {
+
+    // İlk kontrol hemen yap
+    _checkTokenNow();
+
+    // Sonra periyodik kontrol başlat
+    Timer.periodic(const Duration(milliseconds: 500), (timer) async {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
 
-      debugPrint('⏰ Timer kontrol: Token var mı? ${token != null}');
+      debugPrint(
+        '⏰ Timer kontrol (#${timer.tick}): Token var mı? ${token != null}',
+      );
 
       if (token != null && token.isNotEmpty) {
         debugPrint('✅ Token bulundu, homepage\'e yönlendiriliyor');
@@ -162,12 +184,27 @@ class _LoginpageState extends State<Loginpage> {
         if (mounted) {
           _navigateToHomepage();
         }
-      } else if (timer.tick > 30) {
-        // 60 saniye sonra durdur
+      } else if (timer.tick > 120) {
+        // 60 saniye sonra durdur (500ms * 120 = 60s)
         debugPrint('⏰ Timer timeout, durduruluyor');
         timer.cancel();
       }
     });
+  }
+
+  // Anında token kontrolü
+  Future<void> _checkTokenNow() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+
+    debugPrint(
+      '🔍 Anında token kontrolü: ${token != null ? "Token var" : "Token yok"}',
+    );
+
+    if (token != null && token.isNotEmpty && mounted) {
+      debugPrint('✅ Token bulundu, homepage\'e yönlendiriliyor');
+      _navigateToHomepage();
+    }
   }
 
   // Manuel token girişi dialog'u
@@ -433,6 +470,7 @@ class _LoginpageState extends State<Loginpage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
