@@ -300,19 +300,25 @@ func googleLoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
+    log.Printf("Google callback çağrıldı. URL: %s", r.URL.String())
+    
     state := r.FormValue("state")
+    log.Printf("State: %s", state)
     if state != "random-state" {
+        log.Printf("State geçersiz: %s", state)
         http.Error(w, "State geçersiz", http.StatusBadRequest)
         return
     }
 
     code := r.FormValue("code")
+    log.Printf("Authorization code: %s", code)
     token, err := googleOAuthConfig.Exchange(context.Background(), code)
     if err != nil {
         log.Printf("Token hatası: %v", err)
         http.Error(w, "Token alınamadı", http.StatusInternalServerError)
         return
     }
+    log.Printf("OAuth token alındı: %s", token.AccessToken[:10]+"...")
 
     client := googleOAuthConfig.Client(context.Background(), token)
     resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
@@ -330,6 +336,7 @@ func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "Kullanıcı bilgileri çözülemedi", http.StatusInternalServerError)
         return
     }
+    log.Printf("Google kullanıcı bilgileri alındı: %s (%s)", googleUser.Name, googleUser.Email)
 
     var user User
     err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&user)
@@ -364,6 +371,7 @@ func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
 
     // Flutter uygulamasına token'ı ve login tipini içeren derin bağlantı URL'si ile yönlendirin
     redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s&type=google", jwtToken)
+    log.Printf("Flutter'a yönlendiriliyor: %s", redirectURL)
     http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 

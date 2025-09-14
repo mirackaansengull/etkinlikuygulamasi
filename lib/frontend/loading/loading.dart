@@ -19,27 +19,48 @@ class _LoadingPageState extends State<LoadingPage> {
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _appLinksSubscription;
   bool _isProcessingDeepLink = false;
+  bool _hasProcessedDeepLink = false;
 
   @override
   void initState() {
     super.initState();
-    // Deep link'leri dinle
-    _initAppLinks();
-    // Uygulama başladığında ilk olarak bağlantıyı ve giriş durumunu kontrol et
-    checkConnectionAndLoginStatus();
+    // Deep link'leri dinle ve kontrolleri başlat
+    _initializeApp();
   }
 
-  // Deep link'leri dinle
-  Future<void> _initAppLinks() async {
-    // Uygulama kapalıyken gelen ilk URL'yi al
-    final appLink = await _appLinks.getInitialAppLink();
-    if (appLink != null && appLink.path.contains('/success')) {
-      _handleDeepLink(appLink);
-      return; // Deep link varsa normal kontrolleri yapma
+  // Uygulamayı başlat
+  Future<void> _initializeApp() async {
+    // Önce deep link kontrolü yap
+    final hasDeepLink = await _checkForDeepLink();
+
+    // Deep link yoksa normal kontrolleri başlat
+    if (!hasDeepLink) {
+      checkConnectionAndLoginStatus();
     }
 
-    // Uygulama açıkken gelen URL'leri dinle
+    // Deep link listener'ı başlat
+    _startDeepLinkListener();
+  }
+
+  // Deep link kontrolü
+  Future<bool> _checkForDeepLink() async {
+    try {
+      final appLink = await _appLinks.getInitialAppLink();
+      if (appLink != null && appLink.path.contains('/success')) {
+        debugPrint('Deep link bulundu: $appLink');
+        _handleDeepLink(appLink);
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Deep link kontrol hatası: $e');
+    }
+    return false;
+  }
+
+  // Deep link listener'ı başlat
+  void _startDeepLinkListener() {
     _appLinksSubscription = _appLinks.uriLinkStream.listen((uri) {
+      debugPrint('Yeni deep link alındı: $uri');
       if (uri.path.contains('/success') && mounted && !_isProcessingDeepLink) {
         _handleDeepLink(uri);
       }
@@ -48,30 +69,63 @@ class _LoadingPageState extends State<LoadingPage> {
 
   // Deep link'den gelen token'ı işle
   void _handleDeepLink(Uri uri) async {
-    if (_isProcessingDeepLink) return;
+    if (_isProcessingDeepLink || _hasProcessedDeepLink) return;
     _isProcessingDeepLink = true;
+    _hasProcessedDeepLink = true;
+
+    debugPrint('🔗 Deep link işleniyor: $uri');
 
     final token = uri.queryParameters['token'];
     final loginType = uri.queryParameters['type'];
 
-    if (token != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_token', token);
+    debugPrint(
+      '🔑 Token: ${token != null ? "${token.substring(0, 20)}..." : "null"}, Type: $loginType',
+    );
 
-      // Social login tipini kaydet
-      if (loginType != null) {
-        await prefs.setString('social_login_type', loginType);
-        await prefs.setBool('auto_social_login', true);
-      }
+    if (token != null && token.isNotEmpty) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', token);
+        debugPrint('✅ Token kaydedildi');
 
-      if (mounted) {
-        _navigateToHomepage();
+        // Social login tipini kaydet
+        if (loginType != null) {
+          await prefs.setString('social_login_type', loginType);
+          await prefs.setBool('auto_social_login', true);
+          debugPrint('✅ Social login tipi kaydedildi: $loginType');
+        }
+
+        // Kısa bir gecikme ekle ve homepage'e git
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        if (mounted) {
+          debugPrint('🏠 Homepage\'e yönlendiriliyor...');
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const Homepage()),
+            (route) => false,
+          );
+        }
+      } catch (e) {
+        debugPrint('❌ Deep link işleme hatası: $e');
+        _isProcessingDeepLink = false;
+        _hasProcessedDeepLink = false;
       }
+    } else {
+      debugPrint('❌ Token bulunamadı, login sayfasına yönlendiriliyor');
+      _isProcessingDeepLink = false;
+      _hasProcessedDeepLink = false;
+      _navigateToLoginPage();
     }
   }
 
   // Bağlantıyı ve token'ı kontrol eden fonksiyon
   void checkConnectionAndLoginStatus() async {
+    // Deep link işleniyorsa normal kontrolleri yapma
+    if (_hasProcessedDeepLink) {
+      debugPrint('🔗 Deep link işlendi, normal kontroller atlanıyor');
+      return;
+    }
+
     const backendUrl = 'https://etkinlikuygulamasi.onrender.com';
 
     try {
@@ -85,23 +139,32 @@ class _LoadingPageState extends State<LoadingPage> {
         } else {
           // Bağlantı başarısız, tekrar dene
           await Future.delayed(const Duration(seconds: 3));
-          checkConnectionAndLoginStatus();
+          if (!_hasProcessedDeepLink) {
+            checkConnectionAndLoginStatus();
+          }
         }
       } else {
         // HTTP hatası, tekrar dene
         await Future.delayed(const Duration(seconds: 3));
-        checkConnectionAndLoginStatus();
+        if (!_hasProcessedDeepLink) {
+          checkConnectionAndLoginStatus();
+        }
       }
     } catch (e) {
       // Ağ hatası veya diğer hatalar, tekrar dene
       debugPrint('Bağlantı hatası: $e');
       await Future.delayed(const Duration(seconds: 3));
-      checkConnectionAndLoginStatus();
+      if (!_hasProcessedDeepLink) {
+        checkConnectionAndLoginStatus();
+      }
     }
   }
 
   // Giriş durumunu kontrol et ve yönlendirme yap
   Future<void> _checkLoginStatus() async {
+    // Deep link işleniyorsa kontrolleri yapma
+    if (_hasProcessedDeepLink) return;
+
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
 
@@ -120,19 +183,27 @@ class _LoadingPageState extends State<LoadingPage> {
 
         if (response.statusCode == 200) {
           // Token geçerliyse, doğrudan ana sayfaya yönlendir
-          _navigateToHomepage();
+          if (!_hasProcessedDeepLink) {
+            _navigateToHomepage();
+          }
         } else {
           // Token geçersizse, social login kontrolü yap
-          await _checkAutoSocialLogin(prefs);
+          if (!_hasProcessedDeepLink) {
+            await _checkAutoSocialLogin(prefs);
+          }
         }
       } catch (e) {
         // Ağ hatası durumunda social login kontrolü yap
         debugPrint('Token doğrulama sırasında hata oluştu: $e');
-        await _checkAutoSocialLogin(prefs);
+        if (!_hasProcessedDeepLink) {
+          await _checkAutoSocialLogin(prefs);
+        }
       }
     } else {
       // Token yoksa social login kontrolü yap
-      await _checkAutoSocialLogin(prefs);
+      if (!_hasProcessedDeepLink) {
+        await _checkAutoSocialLogin(prefs);
+      }
     }
   }
 
