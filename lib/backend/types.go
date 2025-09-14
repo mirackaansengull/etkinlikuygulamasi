@@ -2,6 +2,7 @@ package main
 
 import (
 	"time"
+	"github.com/dgrijalva/jwt-go"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -78,4 +79,9 @@ type ResetPasswordRequest struct {
 	Email       string `json:"email"`
 	Code        string `json:"code"`
 	NewPassword string `json:"newPassword"`
+}
+
+type Claims struct {
+	Email string `json:"email"`
+	jwt.StandardClaims
 }

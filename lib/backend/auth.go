@@ -12,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -19,6 +20,10 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
+
+var googleOAuthConfig *oauth2.Config
+	var facebookOAuthConfig *oauth2.Config
+	var jwtKey = []byte(os.Getenv("JWT_SECRET_KEY"))
 
 // --- Yardımcı Fonksiyonlar ---
 
@@ -60,9 +65,6 @@ func sendEmail(to, subject, body string) error {
 }
 
 
-var googleOAuthConfig *oauth2.Config
-var facebookOAuthConfig *oauth2.Config
-
 func init() {
 	// Google OAuth2 yapılandırması
 	googleOAuthConfig = &oauth2.Config{
@@ -84,6 +86,23 @@ func init() {
 			TokenURL: "https://graph.facebook.com/v10.0/oauth/access_token",
 		},
 	}
+}
+
+func createToken(email string) (string, error) {
+	expirationTime := time.Now().Add(24 * 7 * time.Hour) // Token 7 gün geçerli olacak
+	claims := &Claims{
+		Email: email,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: expirationTime.Unix(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtKey)
+	if err != nil {
+		return "", err
+	}
+	return tokenString, nil
 }
 
 // --- Handler Fonksiyonları ---
@@ -399,6 +418,46 @@ func facebookCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "etkinlikuygulamasi://login/success", http.StatusFound)
 }
 
+// verifyTokenHandler, gönderilen token'ı doğrular ve geçerliyse kullanıcı bilgilerini döndürür
+func verifyTokenHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	tokenString := r.Header.Get("Authorization")
+	if tokenString == "" {
+		http.Error(w, "Yetkilendirme token'ı eksik", http.StatusUnauthorized)
+		return
+	}
+
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		return jwtKey, nil
+	})
+
+	if err != nil || !token.Valid {
+		http.Error(w, "Geçersiz token", http.StatusUnauthorized)
+		return
+	}
+
+	var user User
+	err = usersCollection.FindOne(context.Background(), bson.M{"email": claims.Email}).Decode(&user)
+	if err != nil {
+		http.Error(w, "Kullanıcı bulunamadı", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Token geçerli",
+	})
+}
 // Şifre sıfırlama kodu gönderme handler'ı
 func sendPasswordResetCodeHandler(w http.ResponseWriter, r *http.Request) {
 	var req SendCodeRequest
