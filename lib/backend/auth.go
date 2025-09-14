@@ -322,7 +322,6 @@ func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "etkinlikuygulamasi://login/success", http.StatusFound)
 }
 
 // Facebook girişini başlatan handler

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:app_links/app_links.dart';
 
@@ -75,25 +76,32 @@ class _LoginpageState extends State<Loginpage> {
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        if (responseData['status'] == 'success') {
-          _navigateToHomepage();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(responseData['message'] ?? 'Giriş başarısız'),
-            ),
-          );
+        final token = responseData['token']; // Backend'den gelen token'ı al
+
+        // Token'ı yerel depolamaya kaydet
+        if (_rememberMe) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('auth_token', token);
         }
+
+        // Başarılı girişten sonra Anasayfa'ya yönlendir
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const Homepage()),
+        );
       } else {
+        final responseData = jsonDecode(response.body);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sunucu hatası: ${response.statusCode}')),
+          SnackBar(
+            content: Text(responseData['message'] ?? 'Giriş başarısız oldu.'),
+          ),
         );
       }
     } catch (e) {
-      debugPrint('Giriş hatası: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Bir hata oluştu')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bir hata oluştu. Lütfen tekrar deneyin.'),
+        ),
+      );
     }
   }
 
