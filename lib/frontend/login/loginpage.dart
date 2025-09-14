@@ -4,7 +4,6 @@ import 'package:etkinlikuygulamasi/frontend/home/homepage.dart';
 import 'package:etkinlikuygulamasi/frontend/login/forgotpasswordpage.dart';
 import 'package:etkinlikuygulamasi/frontend/login/registerpage.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,37 +28,44 @@ class _LoginpageState extends State<Loginpage> {
   @override
   void initState() {
     super.initState();
+    // Uygulama açıldığında derin bağlantıları dinle
     _initAppLinks();
   }
 
+  // Uygulamanın derin bağlantıları işlemesini sağlayan fonksiyon
   Future<void> _initAppLinks() async {
     // Uygulama kapalıyken gelen ilk URL'yi al
-    try {
-      final appLink = await _appLinks.getInitialAppLink();
-      if (appLink != null && appLink.path == '/success') {
-        _navigateToHomepage();
-      }
-    } on PlatformException {
-      // Hata oluşursa
-      debugPrint('Initial app link alırken hata oluştu.');
+    final appLink = await _appLinks.getInitialAppLink();
+    if (appLink != null && appLink.path.contains('/success')) {
+      _handleDeepLink(appLink);
     }
-
     // Uygulama açıkken gelen URL'leri dinle
     _appLinksSubscription = _appLinks.uriLinkStream.listen((uri) {
-      if (uri.path == '/success' && mounted) {
-        _navigateToHomepage();
+      if (uri.path.contains('/success') && mounted) {
+        _handleDeepLink(uri);
       }
     });
   }
 
-  void _navigateToHomepage() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const Homepage()),
-    );
+  // Derin bağlantıdan gelen token'ı işleyen fonksiyon
+  void _handleDeepLink(Uri uri) async {
+    final token = uri.queryParameters['token'];
+    if (token != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('auth_token', token);
+      _navigateToHomepage();
+    }
   }
 
-  // E-posta ve şifre ile giriş için handler
+  void _navigateToHomepage() {
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const Homepage()),
+      );
+    }
+  }
+
   Future<void> _loginHandler(BuildContext context) async {
     final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
     final Uri url = Uri.parse('$serverUrl/login');
@@ -76,18 +82,12 @@ class _LoginpageState extends State<Loginpage> {
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        final token = responseData['token']; // Backend'den gelen token'ı al
-
-        // Token'ı yerel depolamaya kaydet
-        if (_rememberMe) {
+        final token = responseData['token'];
+        if (_rememberMe && token != null) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('auth_token', token);
         }
-
-        // Başarılı girişten sonra Anasayfa'ya yönlendir
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const Homepage()),
-        );
+        _navigateToHomepage();
       } else {
         final responseData = jsonDecode(response.body);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -105,11 +105,9 @@ class _LoginpageState extends State<Loginpage> {
     }
   }
 
-  // Google Giriş için URL'yi başlatma fonksiyonu
   void _launchGoogleLogin(BuildContext context) async {
     final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
     final Uri url = Uri.parse('$serverUrl/google/login');
-
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.inAppBrowserView);
     } else {
@@ -119,13 +117,9 @@ class _LoginpageState extends State<Loginpage> {
     }
   }
 
-  // loginpage.dart
-
-  // Facebook Giriş için URL'yi başlatma fonksiyonu
   void _launchFacebookLogin(BuildContext context) async {
     final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
     final Uri url = Uri.parse('$serverUrl/facebook/login');
-
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.inAppBrowserView);
     } else {

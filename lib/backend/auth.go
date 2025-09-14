@@ -300,60 +300,71 @@ func googleLoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
-	state := r.FormValue("state")
-	if state != "random-state" {
-		http.Error(w, "State geçersiz", http.StatusBadRequest)
-		return
-	}
+    state := r.FormValue("state")
+    if state != "random-state" {
+        http.Error(w, "State geçersiz", http.StatusBadRequest)
+        return
+    }
 
-	code := r.FormValue("code")
-	token, err := googleOAuthConfig.Exchange(context.Background(), code)
-	if err != nil {
-		log.Printf("Token hatası: %v", err)
-		http.Error(w, "Token alınamadı", http.StatusInternalServerError)
-		return
-	}
+    code := r.FormValue("code")
+    token, err := googleOAuthConfig.Exchange(context.Background(), code)
+    if err != nil {
+        log.Printf("Token hatası: %v", err)
+        http.Error(w, "Token alınamadı", http.StatusInternalServerError)
+        return
+    }
 
-	client := googleOAuthConfig.Client(context.Background(), token)
-	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-	if err != nil {
-		log.Printf("Google API hatası: %v", err)
-		http.Error(w, "Kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
+    client := googleOAuthConfig.Client(context.Background(), token)
+    resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+    if err != nil {
+        log.Printf("Google API hatası: %v", err)
+        http.Error(w, "Kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
+        return
+    }
+    defer resp.Body.Close()
 
-	googleUser := GoogleUser{}
-	err = json.NewDecoder(resp.Body).Decode(&googleUser)
-	if err != nil {
-		log.Printf("JSON çözme hatası: %v", err)
-		http.Error(w, "Kullanıcı bilgileri çözülemedi", http.StatusInternalServerError)
-		return
-	}
+    googleUser := GoogleUser{}
+    err = json.NewDecoder(resp.Body).Decode(&googleUser)
+    if err != nil {
+        log.Printf("JSON çözme hatası: %v", err)
+        http.Error(w, "Kullanıcı bilgileri çözülemedi", http.StatusInternalServerError)
+        return
+    }
 
-	var user User
-	err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&user)
-	if err == mongo.ErrNoDocuments {
-		newUser := User{
-			Ad:          googleUser.GivenName,
-			Soyad:       googleUser.FamilyName,
-			Email:       googleUser.Email,
-			Provider:    "google",
-			SocialID:    googleUser.Email,
-			CreatedAt:   time.Now(),
-		}
-		_, err = usersCollection.InsertOne(context.Background(), newUser)
-		if err != nil {
-			log.Printf("Yeni kullanıcı kaydetme hatası: %v", err)
-			http.Error(w, "Kayıt başarısız", http.StatusInternalServerError)
-			return
-		}
-	} else if err != nil {
-		log.Printf("Veritabanı hatası: %v", err)
-		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "etkinlikuygulamasi://login/success", http.StatusFound)
+    var user User
+    err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&user)
+    if err == mongo.ErrNoDocuments {
+        newUser := User{
+            Ad:        googleUser.GivenName,
+            Soyad:     googleUser.FamilyName,
+            Email:     googleUser.Email,
+            Provider:  "google",
+            SocialID:  googleUser.Email,
+            CreatedAt: time.Now(),
+        }
+        _, err = usersCollection.InsertOne(context.Background(), newUser)
+        if err != nil {
+            log.Printf("Yeni kullanıcı kaydetme hatası: %v", err)
+            http.Error(w, "Kayıt başarısız", http.StatusInternalServerError)
+            return
+        }
+    } else if err != nil {
+        log.Printf("Veritabanı hatası: %v", err)
+        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+        return
+    }
+
+    // Mevcut createToken fonksiyonunuzu kullanarak bir JWT token oluşturun
+    jwtToken, err := createToken(googleUser.Email)
+    if err != nil {
+        log.Printf("JWT oluşturma hatası: %v", err)
+        http.Error(w, "Token oluşturma başarısız", http.StatusInternalServerError)
+        return
+    }
+
+    // Flutter uygulamasına token'ı içeren derin bağlantı URL'si ile yönlendirin
+    redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s", jwtToken)
+    http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
 // Facebook girişini başlatan handler
