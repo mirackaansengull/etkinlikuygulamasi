@@ -7,6 +7,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_links/app_links.dart';
+import 'package:flutter/services.dart';
 
 class LoadingPage extends StatefulWidget {
   const LoadingPage({super.key});
@@ -15,7 +16,7 @@ class LoadingPage extends StatefulWidget {
   State<LoadingPage> createState() => _LoadingPageState();
 }
 
-class _LoadingPageState extends State<LoadingPage> {
+class _LoadingPageState extends State<LoadingPage> with WidgetsBindingObserver {
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _appLinksSubscription;
   bool _isProcessingDeepLink = false;
@@ -24,17 +25,56 @@ class _LoadingPageState extends State<LoadingPage> {
   @override
   void initState() {
     super.initState();
+    // App lifecycle observer ekle
+    WidgetsBinding.instance.addObserver(this);
     // Deep link'leri dinle ve kontrolleri başlat
     _initializeApp();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    debugPrint('📱 App lifecycle değişti: $state');
+
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('🔄 App resume oldu, token kontrol ediliyor...');
+      _checkTokenAfterResume();
+    }
+  }
+
+  // App resume olduktan sonra token kontrolü
+  Future<void> _checkTokenAfterResume() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+
+    debugPrint(
+      '🔍 Resume sonrası token kontrolü: ${token != null ? "Token var" : "Token yok"}',
+    );
+
+    if (token != null && token.isNotEmpty && !_hasProcessedDeepLink) {
+      debugPrint('✅ Token bulundu, homepage\'e yönlendiriliyor');
+      _hasProcessedDeepLink = true;
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const Homepage()),
+          (route) => false,
+        );
+      }
+    }
+  }
+
   // Uygulamayı başlat
   Future<void> _initializeApp() async {
+    debugPrint('🚀 Uygulama başlatılıyor...');
+
     // Önce deep link kontrolü yap
     final hasDeepLink = await _checkForDeepLink();
 
     // Deep link yoksa normal kontrolleri başlat
     if (!hasDeepLink) {
+      debugPrint('📱 Normal kontroller başlatılıyor...');
       checkConnectionAndLoginStatus();
     }
 
@@ -44,27 +84,45 @@ class _LoadingPageState extends State<LoadingPage> {
 
   // Deep link kontrolü
   Future<bool> _checkForDeepLink() async {
+    debugPrint('🔍 Deep link kontrol ediliyor...');
     try {
       final appLink = await _appLinks.getInitialAppLink();
+      debugPrint('📋 Initial app link: $appLink');
+
       if (appLink != null && appLink.path.contains('/success')) {
-        debugPrint('Deep link bulundu: $appLink');
+        debugPrint('✅ Deep link bulundu: $appLink');
         _handleDeepLink(appLink);
         return true;
+      } else {
+        debugPrint('❌ Deep link bulunamadı');
       }
     } catch (e) {
-      debugPrint('Deep link kontrol hatası: $e');
+      debugPrint('❌ Deep link kontrol hatası: $e');
     }
     return false;
   }
 
   // Deep link listener'ı başlat
   void _startDeepLinkListener() {
-    _appLinksSubscription = _appLinks.uriLinkStream.listen((uri) {
-      debugPrint('Yeni deep link alındı: $uri');
-      if (uri.path.contains('/success') && mounted && !_isProcessingDeepLink) {
-        _handleDeepLink(uri);
-      }
-    });
+    debugPrint('👂 Deep link listener başlatılıyor...');
+    _appLinksSubscription = _appLinks.uriLinkStream.listen(
+      (uri) {
+        debugPrint('📨 Yeni deep link alındı: $uri');
+        if (uri.path.contains('/success') &&
+            mounted &&
+            !_isProcessingDeepLink) {
+          debugPrint('✅ Deep link işlenecek');
+          _handleDeepLink(uri);
+        } else {
+          debugPrint(
+            '❌ Deep link işlenmedi - path: ${uri.path}, mounted: $mounted, processing: $_isProcessingDeepLink',
+          );
+        }
+      },
+      onError: (error) {
+        debugPrint('❌ Deep link listener hatası: $error');
+      },
+    );
   }
 
   // Deep link'den gelen token'ı işle
@@ -251,8 +309,18 @@ class _LoadingPageState extends State<LoadingPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _appLinksSubscription?.cancel();
     super.dispose();
+  }
+
+  // Test için manuel deep link işleme
+  void _testDeepLink() {
+    final testUri = Uri.parse(
+      'etkinlikuygulamasi://login/success?token=test_token&type=google',
+    );
+    debugPrint('🧪 Test deep link işleniyor: $testUri');
+    _handleDeepLink(testUri);
   }
 
   @override
@@ -264,6 +332,7 @@ class _LoadingPageState extends State<LoadingPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Image.asset('images/eventra.png', width: 200.w, height: 200.h),
+            SizedBox(height: 20.h),
             SizedBox(
               width: 35.h,
               height: 35.h,
@@ -272,6 +341,13 @@ class _LoadingPageState extends State<LoadingPage> {
                 strokeCap: StrokeCap.round,
               ),
             ),
+            SizedBox(height: 40.h),
+            // Test butonu (sadece debug için)
+            if (true) // Debug mode kontrolü yapabilirsiniz
+              ElevatedButton(
+                onPressed: _testDeepLink,
+                child: const Text('Test Deep Link'),
+              ),
           ],
         ),
       ),

@@ -133,7 +133,11 @@ class _LoginpageState extends State<Loginpage> {
     final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
     final Uri url = Uri.parse('$serverUrl/google/login');
     if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+      // External browser'da aç (in-app browser yerine)
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+
+      // Google login'den sonra token kontrolü yap
+      _startTokenCheckTimer();
     } else {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -143,11 +147,90 @@ class _LoginpageState extends State<Loginpage> {
     }
   }
 
+  // Google login sonrası token kontrolü
+  void _startTokenCheckTimer() {
+    debugPrint('🔄 Token kontrol timer başlatıldı');
+    Timer.periodic(const Duration(seconds: 2), (timer) async {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      debugPrint('⏰ Timer kontrol: Token var mı? ${token != null}');
+
+      if (token != null && token.isNotEmpty) {
+        debugPrint('✅ Token bulundu, homepage\'e yönlendiriliyor');
+        timer.cancel();
+        if (mounted) {
+          _navigateToHomepage();
+        }
+      } else if (timer.tick > 30) {
+        // 60 saniye sonra durdur
+        debugPrint('⏰ Timer timeout, durduruluyor');
+        timer.cancel();
+      }
+    });
+  }
+
+  // Manuel token girişi dialog'u
+  void _showManualTokenDialog() {
+    final tokenController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Manuel Token Girişi'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Google/Facebook girişi sonrası aldığınız token\'ı buraya yapıştırın:',
+            ),
+            SizedBox(height: 16.h),
+            TextField(
+              controller: tokenController,
+              decoration: const InputDecoration(
+                labelText: 'Token',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final token = tokenController.text.trim();
+              if (token.isNotEmpty) {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('auth_token', token);
+                await prefs.setString('social_login_type', 'manual');
+                await prefs.setBool('auto_social_login', true);
+
+                if (mounted) {
+                  Navigator.pop(context);
+                  _navigateToHomepage();
+                }
+              }
+            },
+            child: const Text('Giriş Yap'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _launchFacebookLogin(BuildContext context) async {
     final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
     final Uri url = Uri.parse('$serverUrl/facebook/login');
     if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+      // External browser'da aç (in-app browser yerine)
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+
+      // Facebook login'den sonra token kontrolü yap
+      _startTokenCheckTimer();
     } else {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -312,6 +395,19 @@ class _LoginpageState extends State<Loginpage> {
                     ),
                   ),
                 ],
+              ),
+              SizedBox(height: 16.h),
+              // Manuel token girişi butonu
+              TextButton(
+                onPressed: _showManualTokenDialog,
+                child: Text(
+                  'Manuel Token Girişi',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    color: Colors.grey[600],
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
               ),
               SizedBox(height: 24.h),
               Text('Hala üye değil misin?', style: TextStyle(fontSize: 14.sp)),
