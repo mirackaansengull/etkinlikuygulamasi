@@ -173,47 +173,59 @@ func sendCodeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+    w.Header().Set("Access-Control-Allow-Origin", "*")
+    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
-		return
-	}
+    if r.Method == http.MethodOptions {
+        w.WriteHeader(http.StatusOK)
+        return
+    }
+    if r.Method != http.MethodPost {
+        http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
+        return
+    }
 
-	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
-		return
-	}
+    var req LoginRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+        return
+    }
 
-	var user User
-	err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email, "provider": "email"}).Decode(&user)
-	if err == mongo.ErrNoDocuments {
-		http.Error(w, "Kullanıcı bulunamadı veya yanlış kimlik doğrulama yöntemi", http.StatusUnauthorized)
-		return
-	} else if err != nil {
-		log.Printf("Veritabanı hatası: %v", err)
-		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-		return
-	}
+    // Kullanıcıyı veritabanında ara
+    var user User
+    err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email, "provider": "email"}).Decode(&user)
+    if err == mongo.ErrNoDocuments {
+        http.Error(w, "Kullanıcı bulunamadı veya yanlış kimlik doğrulama yöntemi", http.StatusUnauthorized)
+        return
+    } else if err != nil {
+        log.Printf("Veritabanı hatası: %v", err)
+        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+        return
+    }
 
-	if !checkPasswordHash(req.Sifre, user.Sifre) {
-		http.Error(w, "Hatalı şifre", http.StatusUnauthorized)
-		return
-	}
+    // Şifreyi kontrol et
+    if !checkPasswordHash(req.Sifre, user.Sifre) {
+        http.Error(w, "Hatalı şifre", http.StatusUnauthorized)
+        return
+    }
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"status":  "success",
-		"message": "Giriş başarılı",
-	})
+	// Token oluştur ve yanıtla birlikte gönder
+    token, err := createToken(user.Email)
+    if err != nil {
+        log.Printf("Token oluşturma hatası: %v", err)
+        http.Error(w, "Token oluşturulamadı", http.StatusInternalServerError)
+        return
+    }
+    
+    // Başarılı giriş
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(map[string]string{
+        "status":  "success",
+        "message": "Giriş başarılı",
+		"token": token,
+    })
 }
 
 func registerHandler(w http.ResponseWriter, r *http.Request) {
