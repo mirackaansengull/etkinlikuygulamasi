@@ -25,6 +25,10 @@ func main() {
 	r.HandleFunc("/google/callback", googleCallbackHandler).Methods("GET", "OPTIONS")
 	r.HandleFunc("/facebook/login", facebookLoginHandler).Methods("GET", "OPTIONS")
 	r.HandleFunc("/facebook/callback", facebookCallbackHandler).Methods("GET")
+	
+	// User profile endpoints
+	r.HandleFunc("/user/profile", getUserProfileHandler).Methods("GET", "OPTIONS")
+	r.HandleFunc("/user/profile", updateUserProfileHandler).Methods("PUT", "OPTIONS")
 
 	
 

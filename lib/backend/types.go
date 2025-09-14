@@ -85,3 +85,23 @@ type Claims struct {
 	Email string `json:"email"`
 	jwt.StandardClaims
 }
+
+// UserProfileResponse, kullanıcı profil bilgilerini döndürmek için kullanılır
+type UserProfileResponse struct {
+	ID          string    `json:"id"`
+	Ad          string    `json:"ad"`
+	Soyad       string    `json:"soyad"`
+	Email       string    `json:"email"`
+	Telefon     string    `json:"telefon,omitempty"`
+	DogumTarihi string    `json:"dogumTarihi,omitempty"`
+	Provider    string    `json:"provider"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// UpdateProfileRequest, profil güncelleme isteği için kullanılır
+type UpdateProfileRequest struct {
+	Ad          string `json:"ad"`
+	Soyad       string `json:"soyad"`
+	Telefon     string `json:"telefon"`
+	DogumTarihi string `json:"dogumTarihi"`
+}

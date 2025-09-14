@@ -8,13 +8,12 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:app_links/app_links.dart';
 
 class Loginpage extends StatefulWidget {
   const Loginpage({super.key});
 
   @override
-  _LoginpageState createState() => _LoginpageState();
+  State<Loginpage> createState() => _LoginpageState();
 }
 
 class _LoginpageState extends State<Loginpage> {
@@ -22,38 +21,52 @@ class _LoginpageState extends State<Loginpage> {
   final TextEditingController _passwordController = TextEditingController();
   bool _rememberMe = false;
 
-  final _appLinks = AppLinks();
-  StreamSubscription<Uri>? _appLinksSubscription;
-
   @override
   void initState() {
     super.initState();
-    // Uygulama açıldığında derin bağlantıları dinle
-    _initAppLinks();
+    // Kaydedilmiş bilgileri yükle
+    _loadSavedCredentials();
   }
 
-  // Uygulamanın derin bağlantıları işlemesini sağlayan fonksiyon
-  Future<void> _initAppLinks() async {
-    // Uygulama kapalıyken gelen ilk URL'yi al
-    final appLink = await _appLinks.getInitialAppLink();
-    if (appLink != null && appLink.path.contains('/success')) {
-      _handleDeepLink(appLink);
+  // Kaydedilmiş kullanıcı bilgilerini yükle
+  Future<void> _loadSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('saved_email');
+    final savedPassword = prefs.getString('saved_password');
+    final rememberMe = prefs.getBool('remember_me') ?? false;
+
+    if (savedEmail != null && savedPassword != null && rememberMe) {
+      setState(() {
+        _emailController.text = savedEmail;
+        _passwordController.text = savedPassword;
+        _rememberMe = rememberMe;
+      });
+
+      // Otomatik giriş yap
+      await _autoLogin();
     }
-    // Uygulama açıkken gelen URL'leri dinle
-    _appLinksSubscription = _appLinks.uriLinkStream.listen((uri) {
-      if (uri.path.contains('/success') && mounted) {
-        _handleDeepLink(uri);
-      }
-    });
   }
 
-  // Derin bağlantıdan gelen token'ı işleyen fonksiyon
-  void _handleDeepLink(Uri uri) async {
-    final token = uri.queryParameters['token'];
-    if (token != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_token', token);
-      _navigateToHomepage();
+  // Otomatik giriş fonksiyonu
+  Future<void> _autoLogin() async {
+    if (_emailController.text.isNotEmpty &&
+        _passwordController.text.isNotEmpty) {
+      await _loginHandler(context);
+    }
+  }
+
+  // Kullanıcı bilgilerini kaydet
+  Future<void> _saveCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberMe) {
+      await prefs.setString('saved_email', _emailController.text.trim());
+      await prefs.setString('saved_password', _passwordController.text);
+      await prefs.setBool('remember_me', true);
+    } else {
+      // Beni hatırla seçili değilse kaydedilmiş bilgileri sil
+      await prefs.remove('saved_email');
+      await prefs.remove('saved_password');
+      await prefs.setBool('remember_me', false);
     }
   }
 
@@ -83,25 +96,36 @@ class _LoginpageState extends State<Loginpage> {
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
         final token = responseData['token'];
-        if (_rememberMe && token != null) {
+
+        if (token != null) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('auth_token', token);
+
+          // Kullanıcı bilgilerini kaydet (beni hatırla seçiliyse)
+          await _saveCredentials();
         }
-        _navigateToHomepage();
+
+        if (mounted) {
+          _navigateToHomepage();
+        }
       } else {
         final responseData = jsonDecode(response.body);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(responseData['message'] ?? 'Giriş başarısız oldu.'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(responseData['message'] ?? 'Giriş başarısız oldu.'),
+          const SnackBar(
+            content: Text('Bir hata oluştu. Lütfen tekrar deneyin.'),
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bir hata oluştu. Lütfen tekrar deneyin.'),
-        ),
-      );
     }
   }
 
@@ -111,9 +135,11 @@ class _LoginpageState extends State<Loginpage> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.inAppBrowserView);
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('URL açılamadı: $url')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('URL açılamadı: $url')));
+      }
     }
   }
 
@@ -123,9 +149,11 @@ class _LoginpageState extends State<Loginpage> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.inAppBrowserView);
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('URL açılamadı: $url')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('URL açılamadı: $url')));
+      }
     }
   }
 
@@ -201,10 +229,18 @@ class _LoginpageState extends State<Loginpage> {
                     children: [
                       Checkbox(
                         value: _rememberMe,
-                        onChanged: (bool? value) {
+                        onChanged: (bool? value) async {
                           setState(() {
                             _rememberMe = value ?? false;
                           });
+
+                          // Eğer "Beni Hatırla" kapatıldıysa, kaydedilmiş bilgileri temizle
+                          if (!_rememberMe) {
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.remove('saved_email');
+                            await prefs.remove('saved_password');
+                            await prefs.setBool('remember_me', false);
+                          }
                         },
                       ),
                       Text('Beni Hatırla', style: TextStyle(fontSize: 12.sp)),
@@ -301,7 +337,6 @@ class _LoginpageState extends State<Loginpage> {
 
   @override
   void dispose() {
-    _appLinksSubscription?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();

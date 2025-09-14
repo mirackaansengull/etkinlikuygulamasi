@@ -362,8 +362,8 @@ func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Flutter uygulamasına token'ı içeren derin bağlantı URL'si ile yönlendirin
-    redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s", jwtToken)
+    // Flutter uygulamasına token'ı ve login tipini içeren derin bağlantı URL'si ile yönlendirin
+    redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s&type=google", jwtToken)
     http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
@@ -438,7 +438,17 @@ func facebookCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "etkinlikuygulamasi://login/success", http.StatusFound)
+	// JWT token oluştur
+	jwtToken, err := createToken(fbUser.Email)
+	if err != nil {
+		log.Printf("JWT oluşturma hatası: %v", err)
+		http.Error(w, "Token oluşturma başarısız", http.StatusInternalServerError)
+		return
+	}
+
+	// Flutter uygulamasına token'ı ve login tipini içeren derin bağlantı URL'si ile yönlendirin
+	redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s&type=facebook", jwtToken)
+	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
 // verifyTokenHandler, gönderilen token'ı doğrular ve geçerliyse kullanıcı bilgilerini döndürür

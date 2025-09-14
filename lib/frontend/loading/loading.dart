@@ -6,20 +6,68 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:app_links/app_links.dart';
 
 class LoadingPage extends StatefulWidget {
   const LoadingPage({super.key});
 
   @override
-  _LoadingPageState createState() => _LoadingPageState();
+  State<LoadingPage> createState() => _LoadingPageState();
 }
 
 class _LoadingPageState extends State<LoadingPage> {
+  final _appLinks = AppLinks();
+  StreamSubscription<Uri>? _appLinksSubscription;
+  bool _isProcessingDeepLink = false;
+
   @override
   void initState() {
     super.initState();
+    // Deep link'leri dinle
+    _initAppLinks();
     // Uygulama başladığında ilk olarak bağlantıyı ve giriş durumunu kontrol et
     checkConnectionAndLoginStatus();
+  }
+
+  // Deep link'leri dinle
+  Future<void> _initAppLinks() async {
+    // Uygulama kapalıyken gelen ilk URL'yi al
+    final appLink = await _appLinks.getInitialAppLink();
+    if (appLink != null && appLink.path.contains('/success')) {
+      _handleDeepLink(appLink);
+      return; // Deep link varsa normal kontrolleri yapma
+    }
+
+    // Uygulama açıkken gelen URL'leri dinle
+    _appLinksSubscription = _appLinks.uriLinkStream.listen((uri) {
+      if (uri.path.contains('/success') && mounted && !_isProcessingDeepLink) {
+        _handleDeepLink(uri);
+      }
+    });
+  }
+
+  // Deep link'den gelen token'ı işle
+  void _handleDeepLink(Uri uri) async {
+    if (_isProcessingDeepLink) return;
+    _isProcessingDeepLink = true;
+
+    final token = uri.queryParameters['token'];
+    final loginType = uri.queryParameters['type'];
+
+    if (token != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('auth_token', token);
+
+      // Social login tipini kaydet
+      if (loginType != null) {
+        await prefs.setString('social_login_type', loginType);
+        await prefs.setBool('auto_social_login', true);
+      }
+
+      if (mounted) {
+        _navigateToHomepage();
+      }
+    }
   }
 
   // Bağlantıyı ve token'ı kontrol eden fonksiyon
@@ -65,7 +113,7 @@ class _LoadingPageState extends State<LoadingPage> {
         final response = await http.post(
           url,
           headers: {
-            'Authorization': 'Bearer $token', // DÜZELTİLMİŞ SATIR
+            'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
           },
         );
@@ -74,31 +122,66 @@ class _LoadingPageState extends State<LoadingPage> {
           // Token geçerliyse, doğrudan ana sayfaya yönlendir
           _navigateToHomepage();
         } else {
-          // Token geçersizse, token'ı sil ve giriş ekranına yönlendir
-          await prefs.remove('auth_token');
-          _navigateToLoginPage();
+          // Token geçersizse, social login kontrolü yap
+          await _checkAutoSocialLogin(prefs);
         }
       } catch (e) {
-        // Ağ hatası durumunda
+        // Ağ hatası durumunda social login kontrolü yap
         debugPrint('Token doğrulama sırasında hata oluştu: $e');
-        _navigateToLoginPage();
+        await _checkAutoSocialLogin(prefs);
       }
     } else {
-      // Token yoksa doğrudan giriş sayfasına yönlendir
+      // Token yoksa social login kontrolü yap
+      await _checkAutoSocialLogin(prefs);
+    }
+  }
+
+  // Otomatik social login kontrolü
+  Future<void> _checkAutoSocialLogin(SharedPreferences prefs) async {
+    final autoSocialLogin = prefs.getBool('auto_social_login') ?? false;
+    final socialLoginType = prefs.getString('social_login_type');
+
+    if (autoSocialLogin && socialLoginType != null) {
+      // Otomatik social login yap
+      await _performAutoSocialLogin(socialLoginType);
+    } else {
+      // Normal giriş sayfasına yönlendir
+      _navigateToLoginPage();
+    }
+  }
+
+  // Otomatik social login gerçekleştir
+  Future<void> _performAutoSocialLogin(String loginType) async {
+    try {
+      // Şimdilik login sayfasına yönlendir
+      // Gelecekte burada otomatik social login yapılabilir
+      _navigateToLoginPage();
+    } catch (e) {
+      debugPrint('Otomatik social login hatası: $e');
       _navigateToLoginPage();
     }
   }
 
   void _navigateToHomepage() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const Homepage()),
-    );
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const Homepage()),
+      );
+    }
   }
 
   void _navigateToLoginPage() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const Loginpage()),
-    );
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const Loginpage()),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _appLinksSubscription?.cancel();
+    super.dispose();
   }
 
   @override
