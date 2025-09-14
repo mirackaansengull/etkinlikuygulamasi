@@ -115,14 +115,13 @@ func updateUserProfileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Veritabanında güncelle
-	collection := mongoClient.Database("etkinlikapp").Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	filter := bson.M{"email": email}
 	update := bson.M{"$set": updateData}
 
-	result, err := collection.UpdateOne(ctx, filter, update)
+	result, err := usersCollection.UpdateOne(ctx, filter, update)
 	if err != nil {
 		http.Error(w, `{"error": "Profil güncellenirken hata oluştu"}`, http.StatusInternalServerError)
 		return
@@ -174,12 +173,11 @@ func validateTokenAndGetEmail(tokenString string) (string, error) {
 
 // getUserByEmail, email'e göre kullanıcıyı veritabanından getirir
 func getUserByEmail(email string) (*User, error) {
-	collection := mongoClient.Database("etkinlikapp").Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	var user User
-	err := collection.FindOne(ctx, bson.M{"email": email}).Decode(&user)
+	err := usersCollection.FindOne(ctx, bson.M{"email": email}).Decode(&user)
 	if err != nil {
 		return nil, err
 	}
