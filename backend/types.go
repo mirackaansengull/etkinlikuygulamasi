@@ -53,27 +53,7 @@ type MessageResponse struct {
 	Message string `json:"message"`
 }
 
-// GoogleUser, Google'dan gelen kullanıcı bilgilerini tutar
-type GoogleUser struct {
-	Email         string `json:"email"`
-	VerifiedEmail bool   `json:"email_verified"`
-	Name          string `json:"name"`
-	GivenName     string `json:"given_name"`
-	FamilyName    string `json:"family_name"`
-	Picture       string `json:"picture"`
-}
-
-// FacebookUser, Facebook'tan gelen kullanıcı bilgilerini tutar
-type FacebookUser struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Email   string `json:"email"`
-	Picture struct {
-		Data struct {
-			URL string `json:"url"`
-		} `json:"data"`
-	} `json:"picture"`
-}
+// Sosyal giriş kullanıcı tipleri kaldırıldı
 
 type ResetPasswordRequest struct {
 	Email       string `json:"email"`

@@ -1,29 +1,24 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"io" // ioutil yerine io paketi kullanıldı
-	"log"
-	"math/rand"
-	"net/http"
-	"net/smtp"
-	"os"
-	"time"
+    "context"
+    "encoding/json"
+    "fmt"
+    "log"
+    "math/rand"
+    "net/http"
+    "net/smtp"
+    "os"
+    "time"
 
-	"github.com/dgrijalva/jwt-go"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
+    "github.com/dgrijalva/jwt-go"
+    "go.mongodb.org/mongo-driver/bson"
+    "go.mongodb.org/mongo-driver/mongo"
+    "go.mongodb.org/mongo-driver/mongo/options"
+    "golang.org/x/crypto/bcrypt"
 )
 
-var googleOAuthConfig *oauth2.Config
-	var facebookOAuthConfig *oauth2.Config
-	var jwtKey = []byte(os.Getenv("JWT_SECRET_KEY"))
+var jwtKey = []byte(os.Getenv("JWT_SECRET_KEY"))
 
 // --- Yardımcı Fonksiyonlar ---
 
@@ -65,28 +60,7 @@ func sendEmail(to, subject, body string) error {
 }
 
 
-func init() {
-	// Google OAuth2 yapılandırması
-	googleOAuthConfig = &oauth2.Config{
-		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
-		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
-		Endpoint:     google.Endpoint,
-	}
-
-	// Facebook OAuth2 yapılandırması
-	facebookOAuthConfig = &oauth2.Config{
-		ClientID:     os.Getenv("FACEBOOK_CLIENT_ID"),
-		ClientSecret: os.Getenv("FACEBOOK_CLIENT_SECRET"),
-		RedirectURL:  os.Getenv("FACEBOOK_REDIRECT_URL"),
-		Scopes:       []string{"email", "public_profile"},
-		Endpoint: oauth2.Endpoint{
-			AuthURL:  "https://www.facebook.com/v10.0/dialog/oauth",
-			TokenURL: "https://graph.facebook.com/v10.0/oauth/access_token",
-		},
-	}
-}
+// Sosyal girişler kaldırıldı; herhangi bir init yapılandırması yok
 
 func createToken(email string) (string, error) {
 	expirationTime := time.Now().Add(24 * 7 * time.Hour) // Token 7 gün geçerli olacak
@@ -294,171 +268,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(MessageResponse{Message: "Kayıt işlemi başarıyla tamamlandı."})
 }
 
-func googleLoginHandler(w http.ResponseWriter, r *http.Request) {
-	url := googleOAuthConfig.AuthCodeURL("random-state", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
-}
-
-func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
-    log.Printf("Google callback çağrıldı. URL: %s", r.URL.String())
-    
-    state := r.FormValue("state")
-    log.Printf("State: %s", state)
-    if state != "random-state" {
-        log.Printf("State geçersiz: %s", state)
-        http.Error(w, "State geçersiz", http.StatusBadRequest)
-        return
-    }
-
-    code := r.FormValue("code")
-    log.Printf("Authorization code: %s", code)
-    token, err := googleOAuthConfig.Exchange(context.Background(), code)
-    if err != nil {
-        log.Printf("Token hatası: %v", err)
-        http.Error(w, "Token alınamadı", http.StatusInternalServerError)
-        return
-    }
-    log.Printf("OAuth token alındı: %s", token.AccessToken[:10]+"...")
-
-    client := googleOAuthConfig.Client(context.Background(), token)
-    resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-    if err != nil {
-        log.Printf("Google API hatası: %v", err)
-        http.Error(w, "Kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
-        return
-    }
-    defer resp.Body.Close()
-
-    googleUser := GoogleUser{}
-    err = json.NewDecoder(resp.Body).Decode(&googleUser)
-    if err != nil {
-        log.Printf("JSON çözme hatası: %v", err)
-        http.Error(w, "Kullanıcı bilgileri çözülemedi", http.StatusInternalServerError)
-        return
-    }
-    log.Printf("Google kullanıcı bilgileri alındı: %s (%s)", googleUser.Name, googleUser.Email)
-
-    var user User
-    err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&user)
-    if err == mongo.ErrNoDocuments {
-        newUser := User{
-            Ad:        googleUser.GivenName,
-            Soyad:     googleUser.FamilyName,
-            Email:     googleUser.Email,
-            Provider:  "google",
-            SocialID:  googleUser.Email,
-            CreatedAt: time.Now(),
-        }
-        _, err = usersCollection.InsertOne(context.Background(), newUser)
-        if err != nil {
-            log.Printf("Yeni kullanıcı kaydetme hatası: %v", err)
-            http.Error(w, "Kayıt başarısız", http.StatusInternalServerError)
-            return
-        }
-    } else if err != nil {
-        log.Printf("Veritabanı hatası: %v", err)
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
-
-    // Mevcut createToken fonksiyonunuzu kullanarak bir JWT token oluşturun
-    jwtToken, err := createToken(googleUser.Email)
-    if err != nil {
-        log.Printf("JWT oluşturma hatası: %v", err)
-        http.Error(w, "Token oluşturma başarısız", http.StatusInternalServerError)
-        return
-    }
-
-    // Flutter uygulamasına token'ı ve login tipini içeren derin bağlantı URL'si ile yönlendirin
-    redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s&type=google", jwtToken)
-    log.Printf("Flutter'a yönlendiriliyor: %s", redirectURL)
-    http.Redirect(w, r, redirectURL, http.StatusFound)
-}
-
-// Facebook girişini başlatan handler
-func facebookLoginHandler(w http.ResponseWriter, r *http.Request) {
-	url := facebookOAuthConfig.AuthCodeURL("state")
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
-}
-
-// Facebook'tan gelen callback'i işleyen handler
-func facebookCallbackHandler(w http.ResponseWriter, r *http.Request) {
-	state := r.FormValue("state")
-	if state != "state" {
-		http.Error(w, "Geçersiz durum (state)", http.StatusBadRequest)
-		return
-	}
-
-	code := r.FormValue("code")
-	if code == "" {
-		http.Error(w, "Code parametresi eksik", http.StatusBadRequest)
-		return
-	}
-
-	token, err := facebookOAuthConfig.Exchange(context.Background(), code)
-	if err != nil {
-		log.Printf("Token değişimi hatası: %v", err)
-		http.Error(w, "Token değişimi başarısız oldu", http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := http.Get("https://graph.facebook.com/v10.0/me?fields=id,name,email,picture&access_token=" + token.AccessToken)
-	if err != nil {
-		log.Printf("Facebook API çağrısı hatası: %v", err)
-		http.Error(w, "Facebook kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
-	var fbUser FacebookUser
-	body, err := io.ReadAll(resp.Body) // ioutil.ReadAll yerine io.ReadAll kullanıldı
-	if err != nil {
-		log.Printf("Vücut okuma hatası: %v", err)
-		http.Error(w, "Kullanıcı bilgileri okunamadı", http.StatusInternalServerError)
-		return
-	}
-	if err := json.Unmarshal(body, &fbUser); err != nil {
-		log.Printf("JSON ayrıştırma hatası: %v", err)
-		http.Error(w, "Kullanıcı bilgileri ayrıştırılamadı", http.StatusInternalServerError)
-		return
-	}
-
-	var user User
-	err = usersCollection.FindOne(context.Background(), bson.M{"email": fbUser.Email, "provider": "facebook"}).Decode(&user)
-	if err == mongo.ErrNoDocuments {
-		newUser := User{
-			Ad:        fbUser.Name,
-			Email:     fbUser.Email,
-			Provider:  "facebook",
-			SocialID:  fbUser.ID,
-			CreatedAt: time.Now(),
-		}
-		_, err := usersCollection.InsertOne(context.Background(), newUser)
-		if err != nil {
-			log.Printf("Facebook kullanıcısı kaydetme hatası: %v", err)
-			http.Error(w, "Kullanıcı kaydedilemedi", http.StatusInternalServerError)
-			return
-		}
-		log.Printf("Yeni Facebook kullanıcısı kaydedildi: %s", fbUser.Email)
-	} else if err != nil {
-		log.Printf("Veritabanı hatası: %v", err)
-		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-		return
-	}
-
-	// JWT token oluştur
-	jwtToken, err := createToken(fbUser.Email)
-	if err != nil {
-		log.Printf("JWT oluşturma hatası: %v", err)
-		http.Error(w, "Token oluşturma başarısız", http.StatusInternalServerError)
-		return
-	}
-
-	// Flutter uygulamasına token'ı ve login tipini içeren derin bağlantı URL'si ile yönlendirin
-	redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s&type=facebook", jwtToken)
-	log.Printf("Flutter'a yönlendiriliyor: %s", redirectURL)
-	http.Redirect(w, r, redirectURL, http.StatusFound)
-}
+// Google/Facebook sosyal giriş handler'ları kaldırıldı
 
 // verifyTokenHandler, gönderilen token'ı doğrular ve geçerliyse kullanıcı bilgilerini döndürür
 func verifyTokenHandler(w http.ResponseWriter, r *http.Request) {
