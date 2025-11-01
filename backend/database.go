@@ -58,7 +58,7 @@ func InitMongoDB() {
 	log.Println("MongoDB'ye başarıyla bağlanıldı!")
 
 	// Veritabanı ve koleksiyonları başlat
-	database = client.Database("etkinlikuygulamasi") // Veritabanı adını kontrol edin
+	database = client.Database("eventra") // Veritabanı adını kontrol edin
 	usersCollection = database.Collection("users")
 	verificationCollection = database.Collection("verification_codes")
 
