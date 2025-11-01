@@ -34,6 +34,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="etkinlikuygulamasi" />
+                <data android:scheme="etkinlikuygulamasi" android:host="login" android:pathPrefix="/success" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

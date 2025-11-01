@@ -8,6 +8,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:app_links/app_links.dart';
 
 class Loginpage extends StatefulWidget {
   const Loginpage({super.key});
@@ -16,31 +17,46 @@ class Loginpage extends StatefulWidget {
   State<Loginpage> createState() => _LoginpageState();
 }
 
-class _LoginpageState extends State<Loginpage> with WidgetsBindingObserver {
+class _LoginpageState extends State<Loginpage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _rememberMe = false;
 
+  AppLinks? _appLinks;
+  StreamSubscription<Uri>? _appLinksSubscription;
+
   @override
   void initState() {
     super.initState();
-    // App lifecycle observer ekle
-    WidgetsBinding.instance.addObserver(this);
     // Kaydedilmiş bilgileri yükle
     _loadSavedCredentials();
+    // Deep link listener başlat (arka planda)
+    _initDeepLinks();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    debugPrint('📱 Login sayfası - App lifecycle değişti: $state');
+  Future<void> _initDeepLinks() async {
+    _appLinks = AppLinks();
+    // Stream dinle
+    _appLinksSubscription = _appLinks!.uriLinkStream.listen(_handleDeepLink, onError: (_) {});
+    // Uygulama zaten açıksa ve derin link ile gelindiyse ilk linki kontrol et
+    try {
+      final initial = await _appLinks!.getInitialAppLink();
+      if (initial != null) {
+        _handleDeepLink(initial);
+      }
+    } catch (_) {}
+  }
 
-    if (state == AppLifecycleState.resumed) {
-      debugPrint(
-        '🔄 Login sayfası - App resume oldu, token kontrol ediliyor...',
-      );
-      _checkTokenNow();
-    }
+  void _handleDeepLink(Uri uri) async {
+    debugPrint('[LOGIN] Deep link received: $uri');
+    if (!(uri.scheme == 'etkinlikuygulamasi' && uri.host == 'login' && uri.path == '/success')) return;
+    final token = uri.queryParameters['token'];
+    debugPrint('[LOGIN] Token present: ${token != null && token.isNotEmpty}');
+    if (token == null || token.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_token', token);
+    if (!mounted) return;
+    _navigateToHomepage();
   }
 
   // Kaydedilmiş kullanıcı bilgilerini yükle
@@ -148,11 +164,10 @@ class _LoginpageState extends State<Loginpage> with WidgetsBindingObserver {
     final String serverUrl = "https://eventra-2dwa.onrender.com";
     final Uri url = Uri.parse('$serverUrl/google/login');
     if (await canLaunchUrl(url)) {
-      // External browser'da aç (in-app browser yerine)
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-
-      // Google login'den sonra token kontrolü yap
-      _startTokenCheckTimer();
+      await launchUrl(
+        url,
+        mode: LaunchMode.inAppBrowserView,
+      );
     } else {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -162,112 +177,11 @@ class _LoginpageState extends State<Loginpage> with WidgetsBindingObserver {
     }
   }
 
-  // Google login sonrası token kontrolü
-  void _startTokenCheckTimer() {
-    debugPrint('🔄 Token kontrol timer başlatıldı');
-
-    // İlk kontrol hemen yap
-    _checkTokenNow();
-
-    // Sonra periyodik kontrol başlat
-    Timer.periodic(const Duration(milliseconds: 500), (timer) async {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
-
-      debugPrint(
-        '⏰ Timer kontrol (#${timer.tick}): Token var mı? ${token != null}',
-      );
-
-      if (token != null && token.isNotEmpty) {
-        debugPrint('✅ Token bulundu, homepage\'e yönlendiriliyor');
-        timer.cancel();
-        if (mounted) {
-          _navigateToHomepage();
-        }
-      } else if (timer.tick > 120) {
-        // 60 saniye sonra durdur (500ms * 120 = 60s)
-        debugPrint('⏰ Timer timeout, durduruluyor');
-        timer.cancel();
-      }
-    });
-  }
-
-  // Anında token kontrolü
-  Future<void> _checkTokenNow() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-
-    debugPrint(
-      '🔍 Anında token kontrolü: ${token != null ? "Token var" : "Token yok"}',
-    );
-
-    if (token != null && token.isNotEmpty && mounted) {
-      debugPrint('✅ Token bulundu, homepage\'e yönlendiriliyor');
-      _navigateToHomepage();
-    }
-  }
-
-  // Manuel token girişi dialog'u
-  void _showManualTokenDialog() {
-    final tokenController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Manuel Token Girişi'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Google/Facebook girişi sonrası aldığınız token\'ı buraya yapıştırın:',
-            ),
-            SizedBox(height: 16.h),
-            TextField(
-              controller: tokenController,
-              decoration: const InputDecoration(
-                labelText: 'Token',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('İptal'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final token = tokenController.text.trim();
-              if (token.isNotEmpty) {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setString('auth_token', token);
-                await prefs.setString('social_login_type', 'manual');
-                await prefs.setBool('auto_social_login', true);
-
-                if (mounted) {
-                  Navigator.pop(context);
-                  _navigateToHomepage();
-                }
-              }
-            },
-            child: const Text('Giriş Yap'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _launchFacebookLogin(BuildContext context) async {
     final String serverUrl = "https://eventra-2dwa.onrender.com";
     final Uri url = Uri.parse('$serverUrl/facebook/login');
     if (await canLaunchUrl(url)) {
-      // External browser'da aç (in-app browser yerine)
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-
-      // Facebook login'den sonra token kontrolü yap
-      _startTokenCheckTimer();
+      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
     } else {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -433,19 +347,6 @@ class _LoginpageState extends State<Loginpage> with WidgetsBindingObserver {
                   ),
                 ],
               ),
-              SizedBox(height: 16.h),
-              // Manuel token girişi butonu
-              TextButton(
-                onPressed: _showManualTokenDialog,
-                child: Text(
-                  'Manuel Token Girişi',
-                  style: TextStyle(
-                    fontSize: 12.sp,
-                    color: Colors.grey[600],
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-              ),
               SizedBox(height: 24.h),
               Text('Hala üye değil misin?', style: TextStyle(fontSize: 14.sp)),
               TextButton(
@@ -470,7 +371,7 @@ class _LoginpageState extends State<Loginpage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    _appLinksSubscription?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();

@@ -1,23 +1,23 @@
 package main
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "log"
-    "math/rand"
-    "net/http"
-    "net/smtp"
-    "os"
-    "time"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"math/rand"
+	"net/http"
+	"net/smtp"
+	"os"
+	"time"
 
-    "github.com/dgrijalva/jwt-go"
-    "go.mongodb.org/mongo-driver/bson"
-    "go.mongodb.org/mongo-driver/mongo"
-    "go.mongodb.org/mongo-driver/mongo/options"
-    "golang.org/x/crypto/bcrypt"
-    "golang.org/x/oauth2"
-    "golang.org/x/oauth2/google"
+	"github.com/dgrijalva/jwt-go"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 var jwtKey = []byte(os.Getenv("JWT_SECRET_KEY"))
@@ -62,16 +62,15 @@ func sendEmail(to, subject, body string) error {
 	return nil
 }
 
-
 func init() {
-    // Google OAuth2 yapılandırması
-    googleOAuthConfig = &oauth2.Config{
-        ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-        ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-        RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
-        Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
-        Endpoint:     google.Endpoint,
-    }
+	// Google OAuth2 yapılandırması
+	googleOAuthConfig = &oauth2.Config{
+		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
+		Endpoint:     google.Endpoint,
+	}
 }
 
 func createToken(email string) (string, error) {
@@ -159,59 +158,59 @@ func sendCodeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-    if r.Method == http.MethodOptions {
-        w.WriteHeader(http.StatusOK)
-        return
-    }
-    if r.Method != http.MethodPost {
-        http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
-        return
-    }
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Yalnızca POST destekleniyor", http.StatusMethodNotAllowed)
+		return
+	}
 
-    var req LoginRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
-        return
-    }
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Geçersiz istek gövdesi", http.StatusBadRequest)
+		return
+	}
 
-    // Kullanıcıyı veritabanında ara
-    var user User
-    err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email, "provider": "email"}).Decode(&user)
-    if err == mongo.ErrNoDocuments {
-        http.Error(w, "Kullanıcı bulunamadı veya yanlış kimlik doğrulama yöntemi", http.StatusUnauthorized)
-        return
-    } else if err != nil {
-        log.Printf("Veritabanı hatası: %v", err)
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
+	// Kullanıcıyı veritabanında ara
+	var user User
+	err := usersCollection.FindOne(context.Background(), bson.M{"email": req.Email, "provider": "email"}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		http.Error(w, "Kullanıcı bulunamadı veya yanlış kimlik doğrulama yöntemi", http.StatusUnauthorized)
+		return
+	} else if err != nil {
+		log.Printf("Veritabanı hatası: %v", err)
+		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+		return
+	}
 
-    // Şifreyi kontrol et
-    if !checkPasswordHash(req.Sifre, user.Sifre) {
-        http.Error(w, "Hatalı şifre", http.StatusUnauthorized)
-        return
-    }
+	// Şifreyi kontrol et
+	if !checkPasswordHash(req.Sifre, user.Sifre) {
+		http.Error(w, "Hatalı şifre", http.StatusUnauthorized)
+		return
+	}
 
 	// Token oluştur ve yanıtla birlikte gönder
-    token, err := createToken(user.Email)
-    if err != nil {
-        log.Printf("Token oluşturma hatası: %v", err)
-        http.Error(w, "Token oluşturulamadı", http.StatusInternalServerError)
-        return
-    }
-    
-    // Başarılı giriş
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(map[string]string{
-        "status":  "success",
-        "message": "Giriş başarılı",
-		"token": token,
-    })
+	token, err := createToken(user.Email)
+	if err != nil {
+		log.Printf("Token oluşturma hatası: %v", err)
+		http.Error(w, "Token oluşturulamadı", http.StatusInternalServerError)
+		return
+	}
+
+	// Başarılı giriş
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"message": "Giriş başarılı",
+		"token":   token,
+	})
 }
 
 func registerHandler(w http.ResponseWriter, r *http.Request) {
@@ -281,67 +280,68 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func googleLoginHandler(w http.ResponseWriter, r *http.Request) {
-    url := googleOAuthConfig.AuthCodeURL("random-state", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
-    http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	url := googleOAuthConfig.AuthCodeURL("random-state", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
-    state := r.FormValue("state")
-    if state != "random-state" {
-        http.Error(w, "State geçersiz", http.StatusBadRequest)
-        return
-    }
+	state := r.FormValue("state")
+	if state != "random-state" {
+		http.Error(w, "State geçersiz", http.StatusBadRequest)
+		return
+	}
 
-    code := r.FormValue("code")
-    token, err := googleOAuthConfig.Exchange(context.Background(), code)
-    if err != nil {
-        http.Error(w, "Token alınamadı", http.StatusInternalServerError)
-        return
-    }
+	code := r.FormValue("code")
+	token, err := googleOAuthConfig.Exchange(context.Background(), code)
+	if err != nil {
+		http.Error(w, "Token alınamadı", http.StatusInternalServerError)
+		return
+	}
 
-    client := googleOAuthConfig.Client(context.Background(), token)
-    resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-    if err != nil {
-        http.Error(w, "Kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
-        return
-    }
-    defer resp.Body.Close()
+	client := googleOAuthConfig.Client(context.Background(), token)
+	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		http.Error(w, "Kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
 
-    var googleUser GoogleUser
-    if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {
-        http.Error(w, "Kullanıcı bilgileri çözülemedi", http.StatusInternalServerError)
-        return
-    }
+	var googleUser GoogleUser
+	if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {
+		http.Error(w, "Kullanıcı bilgileri çözülemedi", http.StatusInternalServerError)
+		return
+	}
 
-    var user User
-    err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&user)
-    if err == mongo.ErrNoDocuments {
-        newUser := User{
-            Ad:        googleUser.GivenName,
-            Soyad:     googleUser.FamilyName,
-            Email:     googleUser.Email,
-            Provider:  "google",
-            SocialID:  googleUser.Email,
-            CreatedAt: time.Now(),
-        }
-        if _, err = usersCollection.InsertOne(context.Background(), newUser); err != nil {
-            http.Error(w, "Kayıt başarısız", http.StatusInternalServerError)
-            return
-        }
-    } else if err != nil {
-        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
-        return
-    }
+	var user User
+	err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		newUser := User{
+			Ad:        googleUser.GivenName,
+			Soyad:     googleUser.FamilyName,
+			Email:     googleUser.Email,
+			Provider:  "google",
+			SocialID:  googleUser.Email,
+			CreatedAt: time.Now(),
+		}
+		if _, err = usersCollection.InsertOne(context.Background(), newUser); err != nil {
+			http.Error(w, "Kayıt başarısız", http.StatusInternalServerError)
+			return
+		}
+	} else if err != nil {
+		http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+		return
+	}
 
-    jwtToken, err := createToken(googleUser.Email)
-    if err != nil {
-        http.Error(w, "Token oluşturma başarısız", http.StatusInternalServerError)
-        return
-    }
+	jwtToken, err := createToken(googleUser.Email)
+	if err != nil {
+		http.Error(w, "Token oluşturma başarısız", http.StatusInternalServerError)
+		return
+	}
 
-    // Derin bağlantı ile uygulamaya dön
-    redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s&type=google", jwtToken)
-    http.Redirect(w, r, redirectURL, http.StatusFound)
+	// Derin bağlantı ile uygulamaya dön (görünür HTML olmadan)
+	redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s&type=google", jwtToken)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
 // verifyTokenHandler, gönderilen token'ı doğrular ve geçerliyse kullanıcı bilgilerini döndürür
@@ -384,6 +384,7 @@ func verifyTokenHandler(w http.ResponseWriter, r *http.Request) {
 		"message": "Token geçerli",
 	})
 }
+
 // Şifre sıfırlama kodu gönderme handler'ı
 func sendPasswordResetCodeHandler(w http.ResponseWriter, r *http.Request) {
 	var req SendCodeRequest
