@@ -20,7 +20,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   bool _isPasswordVisible = false;
 
   Future<void> _sendCode() async {
-    final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
+    final String serverUrl = "https://eventra-2dwa.onrender.com";
     final Uri url = Uri.parse('$serverUrl/forgot-password/send-code');
 
     // E-posta formatını kontrol et
@@ -67,7 +67,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   }
 
   Future<void> _resetPassword() async {
-    final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
+    final String serverUrl = "https://eventra-2dwa.onrender.com";
     final Uri url = Uri.parse('$serverUrl/forgot-password/reset');
 
     if (_newPasswordController.text.length < 6) {

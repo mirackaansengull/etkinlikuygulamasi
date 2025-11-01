@@ -29,7 +29,7 @@ class _RegisterpageState extends State<Registerpage> {
   // Geri sayım sayacını kontrol eden değişkenler
   int _countdown = 180; // 3 dakika = 180 saniye
   Timer? _timer;
-  final backend_url = Uri.parse('https://etkinlikuygulamasi.onrender.com');
+  final backend_url = Uri.parse('https://eventra-2dwa.onrender.com');
 
   @override
   void dispose() {

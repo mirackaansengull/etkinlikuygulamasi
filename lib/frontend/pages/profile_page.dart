@@ -32,7 +32,7 @@ class _ProfilePageState extends State<ProfilePage> {
       if (token != null) {
         // Backend'den kullanıcı bilgilerini al
         final response = await http.get(
-          Uri.parse('https://etkinlikuygulamasi.onrender.com/user/profile'),
+          Uri.parse('https://eventra-2dwa.onrender.com/user/profile'),
           headers: {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',

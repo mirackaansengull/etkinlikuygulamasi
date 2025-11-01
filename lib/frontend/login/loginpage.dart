@@ -95,7 +95,7 @@ class _LoginpageState extends State<Loginpage> with WidgetsBindingObserver {
   }
 
   Future<void> _loginHandler(BuildContext context) async {
-    final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
+    final String serverUrl = "https://eventra-2dwa.onrender.com";
     final Uri url = Uri.parse('$serverUrl/login');
 
     try {
@@ -145,7 +145,7 @@ class _LoginpageState extends State<Loginpage> with WidgetsBindingObserver {
   }
 
   void _launchGoogleLogin(BuildContext context) async {
-    final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
+    final String serverUrl = "https://eventra-2dwa.onrender.com";
     final Uri url = Uri.parse('$serverUrl/google/login');
     if (await canLaunchUrl(url)) {
       // External browser'da aç (in-app browser yerine)
@@ -260,7 +260,7 @@ class _LoginpageState extends State<Loginpage> with WidgetsBindingObserver {
   }
 
   void _launchFacebookLogin(BuildContext context) async {
-    final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
+    final String serverUrl = "https://eventra-2dwa.onrender.com";
     final Uri url = Uri.parse('$serverUrl/facebook/login');
     if (await canLaunchUrl(url)) {
       // External browser'da aç (in-app browser yerine)

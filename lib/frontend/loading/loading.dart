@@ -204,7 +204,7 @@ class _LoadingPageState extends State<LoadingPage> with WidgetsBindingObserver {
       return;
     }
 
-    const backendUrl = 'https://etkinlikuygulamasi.onrender.com';
+    const backendUrl = 'https://eventra-2dwa.onrender.com';
 
     try {
       final response = await http.get(Uri.parse('$backendUrl/health'));
@@ -248,7 +248,7 @@ class _LoadingPageState extends State<LoadingPage> with WidgetsBindingObserver {
 
     if (token != null && token.isNotEmpty) {
       // Eğer token varsa, token'ın geçerliliğini doğrula
-      final String serverUrl = "https://etkinlikuygulamasi.onrender.com";
+      final String serverUrl = "https://eventra-2dwa.onrender.com";
       final Uri url = Uri.parse('$serverUrl/verify-token');
       try {
         final response = await http.post(
