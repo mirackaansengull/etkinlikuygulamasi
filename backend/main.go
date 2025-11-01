@@ -6,11 +6,14 @@ import (
 	"os"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 )
 
 func main() {
 	// MongoDB bağlantısını başlat
+	_ = godotenv.Load("backend/eventra.env")
+	_ = godotenv.Load("eventra.env")
 	InitMongoDB()
 
 	r := mux.NewRouter()

@@ -361,6 +361,11 @@ func verifyTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// "Bearer " önekini kaldır (varsa)
+	if len(tokenString) > 7 && (tokenString[:7] == "Bearer " || tokenString[:7] == "bearer ") {
+		tokenString = tokenString[7:]
+	}
+
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		return jwtKey, nil
