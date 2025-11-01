@@ -15,13 +15,18 @@ func main() {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/health", healthHandler).Methods("GET", "OPTIONS")
+
+	// Auth endpoints
 	r.HandleFunc("/send-code", sendCodeHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/login", loginHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/register", registerHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/verify-token", verifyTokenHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/forgot-password/send-code", sendPasswordResetCodeHandler).Methods("POST", "OPTIONS")
 	r.HandleFunc("/forgot-password/reset", resetPasswordHandler).Methods("POST", "OPTIONS")
-	// Sosyal giriş endpoint'leri kaldırıldı
+
+	// Google OAuth endpoints
+	r.HandleFunc("/google/login", googleLoginHandler).Methods("GET", "OPTIONS")
+	r.HandleFunc("/google/callback", googleCallbackHandler).Methods("GET", "OPTIONS")
 
 	// User profile endpoints
 	r.HandleFunc("/user/profile", getUserProfileHandler).Methods("GET", "OPTIONS")

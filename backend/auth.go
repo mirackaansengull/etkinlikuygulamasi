@@ -16,9 +16,12 @@ import (
     "go.mongodb.org/mongo-driver/mongo"
     "go.mongodb.org/mongo-driver/mongo/options"
     "golang.org/x/crypto/bcrypt"
+    "golang.org/x/oauth2"
+    "golang.org/x/oauth2/google"
 )
 
 var jwtKey = []byte(os.Getenv("JWT_SECRET_KEY"))
+var googleOAuthConfig *oauth2.Config
 
 // --- Yardımcı Fonksiyonlar ---
 
@@ -60,7 +63,16 @@ func sendEmail(to, subject, body string) error {
 }
 
 
-// Sosyal girişler kaldırıldı; herhangi bir init yapılandırması yok
+func init() {
+    // Google OAuth2 yapılandırması
+    googleOAuthConfig = &oauth2.Config{
+        ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+        ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+        RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+        Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
+        Endpoint:     google.Endpoint,
+    }
+}
 
 func createToken(email string) (string, error) {
 	expirationTime := time.Now().Add(24 * 7 * time.Hour) // Token 7 gün geçerli olacak
@@ -268,7 +280,69 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(MessageResponse{Message: "Kayıt işlemi başarıyla tamamlandı."})
 }
 
-// Google/Facebook sosyal giriş handler'ları kaldırıldı
+func googleLoginHandler(w http.ResponseWriter, r *http.Request) {
+    url := googleOAuthConfig.AuthCodeURL("random-state", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+    http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
+func googleCallbackHandler(w http.ResponseWriter, r *http.Request) {
+    state := r.FormValue("state")
+    if state != "random-state" {
+        http.Error(w, "State geçersiz", http.StatusBadRequest)
+        return
+    }
+
+    code := r.FormValue("code")
+    token, err := googleOAuthConfig.Exchange(context.Background(), code)
+    if err != nil {
+        http.Error(w, "Token alınamadı", http.StatusInternalServerError)
+        return
+    }
+
+    client := googleOAuthConfig.Client(context.Background(), token)
+    resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+    if err != nil {
+        http.Error(w, "Kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
+        return
+    }
+    defer resp.Body.Close()
+
+    var googleUser GoogleUser
+    if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {
+        http.Error(w, "Kullanıcı bilgileri çözülemedi", http.StatusInternalServerError)
+        return
+    }
+
+    var user User
+    err = usersCollection.FindOne(context.Background(), bson.M{"email": googleUser.Email, "provider": "google"}).Decode(&user)
+    if err == mongo.ErrNoDocuments {
+        newUser := User{
+            Ad:        googleUser.GivenName,
+            Soyad:     googleUser.FamilyName,
+            Email:     googleUser.Email,
+            Provider:  "google",
+            SocialID:  googleUser.Email,
+            CreatedAt: time.Now(),
+        }
+        if _, err = usersCollection.InsertOne(context.Background(), newUser); err != nil {
+            http.Error(w, "Kayıt başarısız", http.StatusInternalServerError)
+            return
+        }
+    } else if err != nil {
+        http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+        return
+    }
+
+    jwtToken, err := createToken(googleUser.Email)
+    if err != nil {
+        http.Error(w, "Token oluşturma başarısız", http.StatusInternalServerError)
+        return
+    }
+
+    // Derin bağlantı ile uygulamaya dön
+    redirectURL := fmt.Sprintf("etkinlikuygulamasi://login/success?token=%s&type=google", jwtToken)
+    http.Redirect(w, r, redirectURL, http.StatusFound)
+}
 
 // verifyTokenHandler, gönderilen token'ı doğrular ve geçerliyse kullanıcı bilgilerini döndürür
 func verifyTokenHandler(w http.ResponseWriter, r *http.Request) {

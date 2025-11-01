@@ -2,6 +2,7 @@ package main
 
 import (
 	"time"
+
 	"github.com/dgrijalva/jwt-go"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -15,8 +16,8 @@ type User struct {
 	Telefon     string             `json:"telefon" bson:"telefon,omitempty"`
 	DogumTarihi string             `json:"dogumTarihi" bson:"dogumTarihi,omitempty"`
 	Email       string             `json:"email" bson:"email"`
-	Sifre       string             `json:"sifre" bson:"sifre,omitempty"` // Sosyal girişlerde boş kalabilir
-	Provider    string             `json:"provider" bson:"provider"`    // 'email', 'google', 'facebook'
+	Sifre       string             `json:"sifre" bson:"sifre,omitempty"`       // Sosyal girişlerde boş kalabilir
+	Provider    string             `json:"provider" bson:"provider"`           // 'email', 'google', 'facebook'
 	SocialID    string             `json:"socialId" bson:"socialId,omitempty"` // Google/Facebook ID'si
 	CreatedAt   time.Time          `json:"createdAt" bson:"createdAt"`
 }
@@ -30,8 +31,8 @@ type VerificationCode struct {
 }
 
 type LoginRequest struct {
-    Email    string `json:"email"`
-    Sifre    string `json:"sifre"`
+	Email string `json:"email"`
+	Sifre string `json:"sifre"`
 }
 
 // Handler'lar için istek ve yanıt yapıları
@@ -53,7 +54,15 @@ type MessageResponse struct {
 	Message string `json:"message"`
 }
 
-// Sosyal giriş kullanıcı tipleri kaldırıldı
+// GoogleUser, Google'dan gelen kullanıcı bilgilerini tutar
+type GoogleUser struct {
+	Email         string `json:"email"`
+	VerifiedEmail bool   `json:"email_verified"`
+	Name          string `json:"name"`
+	GivenName     string `json:"given_name"`
+	FamilyName    string `json:"family_name"`
+	Picture       string `json:"picture"`
+}
 
 type ResetPasswordRequest struct {
 	Email       string `json:"email"`
